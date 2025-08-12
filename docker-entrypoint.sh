@@ -72,25 +72,80 @@ ELAPSED=0
 
 # Test if netcat is available
 if ! command -v nc &> /dev/null; then
-  echo "❌ netcat (nc) is not available. Installing..."
-  apt-get update && apt-get install -y netcat-openbsd
+  echo "📦 Installing networking tools..."
+  apt-get update -qq && apt-get install -y -qq netcat-openbsd iputils-ping dnsutils
 fi
 
+# First, test basic network connectivity
+echo "🌐 Network diagnostics for $DB_HOST:$DB_PORT"
+
+# Test DNS resolution
+echo "  🔍 DNS Resolution:"
+if nslookup $DB_HOST > /dev/null 2>&1; then
+  echo "    ✅ DNS resolved successfully"
+  RESOLVED_IP=$(nslookup $DB_HOST | grep -A1 "Name:" | grep "Address:" | head -1 | awk '{print $2}' || echo "unknown")
+  echo "    📍 Resolved to: $RESOLVED_IP"
+else
+  echo "    ❌ DNS resolution failed"
+fi
+
+# Test basic connectivity (ping)
+echo "  🏓 Ping test:"
+if ping -c 1 -W 3 $DB_HOST > /dev/null 2>&1; then
+  echo "    ✅ Host is reachable"
+else
+  echo "    ❌ Host is not reachable via ping"
+fi
+
+# Test port connectivity with detailed feedback
+echo "  🔌 Port connectivity test:"
 while ! nc -z $DB_HOST $DB_PORT; do
   if [ $ELAPSED -ge $TIMEOUT ]; then
-    echo "❌ Database connection timeout after ${TIMEOUT}s"
-    echo "Debug information:"
-    echo "  - Trying to connect to: $DB_HOST:$DB_PORT"
-    echo "  - Network test:"
-    ping -c 1 $DB_HOST || echo "  - Host unreachable"
-    echo "  - DNS resolution:"
-    nslookup $DB_HOST || echo "  - DNS resolution failed"
+    echo "    ❌ Database connection timeout after ${TIMEOUT}s"
+    echo ""
+    echo "🚨 CONNECTION FAILED - Debug Information:"
+    echo "  Target: $DB_HOST:$DB_PORT"
+    echo "  Timeout: ${TIMEOUT} seconds"
+    
+    # Additional network debugging
+    echo ""
+    echo "🔍 Advanced Network Diagnostics:"
+    echo "  - Testing connectivity to common ports..."
+    
+    # Test if host responds to any common ports
+    for test_port in 22 80 443 5432 3000; do
+      if nc -z -w2 $DB_HOST $test_port 2>/dev/null; then
+        echo "    ✅ Port $test_port is open on $DB_HOST"
+      fi
+    done
+    
+    # Show routing information
+    echo "  - Route to host:"
+    ip route get $RESOLVED_IP 2>/dev/null || echo "    ❌ Cannot determine route"
+    
+    # Check if we're in the right network
+    echo "  - Container network info:"
+    ip addr show 2>/dev/null | grep "inet " | head -3
+    
+    echo ""
+    echo "💡 Possible Solutions:"
+    echo "  1. Verify database host is accessible from this network"
+    echo "  2. Check if port $DB_PORT is open on the database server"
+    echo "  3. Verify firewall/security group settings"
+    echo "  4. Confirm database is running on port $DB_PORT"
+    echo "  5. Test connection from Coolify host: nc -z $DB_HOST $DB_PORT"
+    
     exit 1
   fi
-  echo "⏳ Waiting for database connection... (${ELAPSED}s/${TIMEOUT}s)"
+  
+  if [ $((ELAPSED % 10)) -eq 0 ]; then
+    echo "    ⏳ Still trying to connect... (${ELAPSED}s/${TIMEOUT}s)"
+  fi
+  
   sleep 2
   ELAPSED=$((ELAPSED + 2))
 done
+echo "    ✅ Port $DB_PORT is accessible!"
 echo "✅ Database is ready!"
 
 # Test Python/Django setup
