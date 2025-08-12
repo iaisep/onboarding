@@ -6,6 +6,7 @@ from apirest.serializers import llegaSerializer2, llegafaceSerializer2
 from django.http import HttpResponse
 from .codeorm import consult2
 from .AWSocr import consult45
+from .AWSocrRaw import consult45Raw
 from .AWScompare import consult46
 from rest_framework import status
 from django.contrib.auth.models import User
@@ -198,3 +199,93 @@ class Compare3(generics.CreateAPIView):
                     return HttpResponse('{success_: True} , status.HTTP_200_OK -no results found')
                 return Response(df_dicts, status=status.HTTP_200_OK)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+class ocrRaw(generics.CreateAPIView):
+    """
+    Endpoint para OCR que devuelve la respuesta completa de AWS Rekognition
+    sin procesamiento interno, ideal para análisis detallado
+    """
+    serializer_class = llegafaceSerializer2
+    #permission_classes = [IsAuthenticated]
+    
+    def post(self, request, format=None):
+        logger.info("OCR Raw endpoint accessed")
+        logger.debug(f"Raw OCR request data keys: {list(request.data.keys())}")
+        
+        serializer = llegafaceSerializer2(data=request.data)
+        if serializer.is_valid():
+            logger.debug("Serializer validation successful for Raw OCR")
+            serializer.save()
+            str1 = serializer.data.get("faceselfie")
+            str2 = serializer.data.get("ocrident")
+            
+            logger.info(f"Processing Raw OCR request - faceselfie: {str1}, ocrident: {str2}")
+            
+            # Log detailed parameter analysis
+            logger.debug(f"Raw OCR parameter analysis:")
+            logger.debug(f"  str1 (faceselfie): '{str1}' - appears to be: {'image file' if str1 and '.' in str1 else 'not a file'}")
+            logger.debug(f"  str2 (ocrident): '{str2}' - appears to be: {'image file' if str2 and '.' in str2 else 'not a file'}")
+            
+            # Determine correct parameters for OCR
+            # OCR needs: photo filename, bucket name
+            if str1 and '.' in str1 and str1.lower().endswith(('.jpg', '.jpeg', '.png')):
+                photo_file = str1
+                logger.debug(f"Raw OCR using str1 as photo file: {photo_file}")
+            elif str2 and '.' in str2 and str2.lower().endswith(('.jpg', '.jpeg', '.png')):
+                photo_file = str2  
+                logger.debug(f"Raw OCR using str2 as photo file: {photo_file}")
+            else:
+                logger.error(f"Raw OCR: Neither parameter looks like an image file: str1='{str1}', str2='{str2}'")
+                return Response({
+                    'success': False,
+                    'error': f'No valid image file found in parameters: faceselfie={str1}, ocrident={str2}',
+                    'error_code': '400_Invalid_Image_Parameters',
+                    'raw_response': None
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            try:
+                logger.debug("Initializing consult45Raw OCR class")
+                raw_ocr = consult45Raw()
+                
+                # Get bucket name from environment variables
+                bucket_name = config('AWS_S3_BUCKET', default='onboarding-uisep')
+                logger.debug(f"Raw OCR using bucket from config: {bucket_name}")
+                logger.info(f"Calling Raw OCR with photo='{photo_file}' and bucket='{bucket_name}'")
+                
+                # Call the raw OCR method that returns complete AWS response
+                result = raw_ocr.detect_text_raw(photo_file, bucket_name)
+                
+                logger.info(f"Raw OCR processing completed - Success: {result.get('success', False)}")
+                
+                if result.get('success'):
+                    logger.info("Raw OCR successful - returning complete AWS response")
+                    return Response(result, status=status.HTTP_200_OK)
+                else:
+                    logger.error(f"Raw OCR failed: {result.get('error', 'Unknown error')}")
+                    return Response(result, status=status.HTTP_400_BAD_REQUEST)
+                
+            except Exception as e:
+                logger.error(f"Unexpected error in Raw OCR processing: {str(e)}")
+                logger.error(f"Exception type: {type(e).__name__}")
+                
+                error_response = {
+                    'success': False,
+                    'error': f'Unexpected Raw OCR error: {str(e)}',
+                    'error_code': '500_Unexpected_Error',
+                    'raw_response': None,
+                    'debug_info': {
+                        'photo_file': photo_file if 'photo_file' in locals() else 'unknown',
+                        'exception_type': type(e).__name__
+                    }
+                }
+                return Response(error_response, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        else:
+            logger.warning(f"Raw OCR serializer validation failed: {serializer.errors}")
+            return Response({
+                'success': False,
+                'error': 'Invalid request data',
+                'error_code': '400_Validation_Error',
+                'validation_errors': serializer.errors,
+                'raw_response': None
+            }, status=status.HTTP_400_BAD_REQUEST)

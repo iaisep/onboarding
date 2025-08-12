@@ -22,6 +22,7 @@ urlpatterns = [
 path('health/', views.health_check),
 path('lists/', views.restric.as_view()),
 path('ocr/', views.ocr2.as_view()),
+path('ocr-raw/', views.ocrRaw.as_view()),
 path('face/', views.Compare3.as_view()),
 path('admin/', admin.site.urls),
 path('login/', views.login),

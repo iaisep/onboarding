@@ -74,20 +74,65 @@ AWS_DEFAULT_REGION=us-east-1
 
 | Endpoint | Método | Descripción |
 |----------|---------|-------------|
-| `/api/health/` | GET | Estado de la API |
-| `/api/ocr/` | POST | Procesamiento OCR |
-| `/api/face-compare/` | POST | Comparación facial |
-| `/api/restricted/` | GET | Lista de sancionados |
+| `/health/` | GET | Estado de la API |
+| `/ocr/` | POST | Procesamiento OCR (procesado) |
+| `/ocr-raw/` | POST | OCR con respuesta completa de AWS |
+| `/face/` | POST | Comparación facial |
+| `/lists/` | POST | Lista de sancionados |
 
-### Ejemplo de Uso - OCR
+### Ejemplo de Uso - OCR Procesado
 
 ```bash
-curl -X POST http://localhost:8000/api/ocr/ \
+curl -X POST http://localhost:8000/ocr/ \
   -H "Content-Type: application/json" \
   -d '{
-    "faceselfie": "selfie.jpg",
-    "ocrident": "cedula.jpg"
+    "faceselfie": "imagen.jpg",
+    "ocrident": "documento.jpg"
   }'
+```
+
+### Ejemplo de Uso - OCR Raw (Respuesta Completa AWS)
+
+```bash
+curl -X POST http://localhost:8000/ocr-raw/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "faceselfie": "imagen.jpg",
+    "ocrident": "documento.jpg"
+  }'
+```
+
+**Respuesta OCR Raw:**
+```json
+{
+  "success": true,
+  "error": null,
+  "error_code": null,
+  "raw_response": {
+    "TextDetections": [
+      {
+        "DetectedText": "REPUBLICA DE PANAMA",
+        "Type": "LINE",
+        "Id": 0,
+        "Confidence": 99.8,
+        "Geometry": {
+          "BoundingBox": {
+            "Width": 0.6234,
+            "Height": 0.0341,
+            "Left": 0.1883,
+            "Top": 0.1234
+          }
+        }
+      }
+    ]
+  },
+  "metadata": {
+    "photo": "cedula.jpg",
+    "bucket": "onboarding-uisep",
+    "text_detections_count": 25,
+    "processing_type": "raw_response"
+  }
+}
 ```
 
 ## 📊 Sistema de Monitoreo
