@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database Service
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: bnp
+      POSTGRES_USER: bnp_user  
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/pgdata
+    networks:
+      - app_network
+    restart: unless-stopped
+    
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bnp_user -d bnp"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Django Application  
+  app:
+    build: .
+    ports:
+      - "${PORT:-8082}:8000"
+    environment:
+      # Django Core
+      - DEBUG=False
+      - SECRET_KEY=${SECRET_KEY}
+      
+      # Internal Database Configuration
+      - DB_NAME=bnp
+      - DB_USER=bnp_user
+      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      
+      # AWS Configuration
+      - AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+      - AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+      - AWS_REKOGNITION_ACCESS_KEY_ID=${AWS_REKOGNITION_ACCESS_KEY_ID}
+      - AWS_REKOGNITION_SECRET_ACCESS_KEY=${AWS_REKOGNITION_SECRET_ACCESS_KEY}
+      - AWS_DEFAULT_REGION=${AWS_DEFAULT_REGION:-us-east-1}
+      - AWS_S3_BUCKET=${AWS_S3_BUCKET}
+      - AWS_S3_FACE_BUCKET=${AWS_S3_FACE_BUCKET}
+      - AWS_S3_IMAGE_BUCKET=${AWS_S3_IMAGE_BUCKET}
+      
+      # OCR Configuration
+      - OCR_MIN_CONFIDENCE=${OCR_MIN_CONFIDENCE:-80}
+      - FACE_MIN_CONFIDENCE=${FACE_MIN_CONFIDENCE:-95}
+      
+      # Security & Access
+      - ALLOWED_HOSTS=${ALLOWED_HOSTS}
+      - DJANGO_SUPERUSER_USERNAME=${DJANGO_SUPERUSER_USERNAME:-admin}
+      - DJANGO_SUPERUSER_EMAIL=${DJANGO_SUPERUSER_EMAIL:-admin@example.com}
+      - DJANGO_SUPERUSER_PASSWORD=${DJANGO_SUPERUSER_PASSWORD}
+    
+    volumes:
+      - static_volume:/app/static
+      - ./logs:/app/logs
+    
+    networks:
+      - app_network
+    
+    depends_on:
+      postgres:
+        condition: service_healthy
+    
+    restart: unless-stopped
+    
+    healthcheck:
+      test: ["CMD", "python", "manage.py", "check", "--database", "default"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+
+volumes:
+  postgres_data:
+  static_volume:
+
+networks:
+  app_network:
+    driver: bridge

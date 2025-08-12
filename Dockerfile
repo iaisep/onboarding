@@ -27,21 +27,21 @@ RUN pip install --no-cache-dir --upgrade pip \
 # Copy project
 COPY . .
 
-# Create static files directory with proper permissions
-RUN mkdir -p /app/static /app/logs \
-    && chmod 755 /app/static /app/logs
+# Create non-root user first
+RUN addgroup --system django \
+    && adduser --system --group django
 
-# Create entrypoint script with executable permissions
+# Create directories and set proper permissions
+RUN mkdir -p /app/static /app/logs \
+    && chmod 755 /app/static /app/logs \
+    && chown -R django:django /app
+
+# Create entrypoint script with executable permissions  
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
 
-# Create non-root user
-RUN addgroup --system django \
-    && adduser --system --group django \
-    && chown -R django:django /app
-
-# Switch to non-root user
-USER django
+# Don't switch to non-root user yet - let entrypoint handle permissions
+# USER django
 
 # Expose port
 EXPOSE 8000

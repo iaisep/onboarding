@@ -148,34 +148,42 @@ done
 echo "    ✅ Port $DB_PORT is accessible!"
 echo "✅ Database is ready!"
 
-# Test Python/Django setup
+# Fix log files permissions (running as root)
+echo "📝 Setting up log files and permissions..."
+mkdir -p /app/logs
+touch /app/logs/django.log /app/logs/aws_errors.log
+chown -R django:django /app/logs
+chmod -R 755 /app/logs
+echo "✅ Log files permissions configured!"
+
+# Test Python/Django setup (as django user)
 echo "🧪 Testing Django setup..."
-python manage.py check --deploy || {
+su - django -c "cd /app && python manage.py check --deploy" || {
   echo "⚠️  Django check failed, but continuing..."
 }
 
-# Run database migrations with verbose output
+# Run database migrations with verbose output (as django user)
 echo "🔄 Running database migrations..."
-python manage.py makemigrations --verbosity=2 --noinput || {
+su - django -c "cd /app && python manage.py makemigrations --verbosity=2 --noinput" || {
   echo "❌ makemigrations failed"
   exit 1
 }
 
-python manage.py migrate --verbosity=2 --noinput || {
+su - django -c "cd /app && python manage.py migrate --verbosity=2 --noinput" || {
   echo "❌ migrate failed"
   exit 1
 }
 echo "✅ Migrations completed successfully!"
 
-# Collect static files
+# Collect static files (as django user)
 echo "📁 Collecting static files..."
-python manage.py collectstatic --noinput --verbosity=2 || {
+su - django -c "cd /app && python manage.py collectstatic --noinput --verbosity=2" || {
   echo "⚠️  collectstatic failed, but continuing..."
 }
 
-# Create superuser if it doesn't exist
+# Create superuser if it doesn't exist (as django user)
 echo "👤 Creating superuser if needed..."
-python -c "
+su - django -c "cd /app && python -c \"
 import os
 import django
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'apibase.settings')
@@ -193,12 +201,12 @@ if not User.objects.filter(username=username).exists():
     print(f'Superuser {username} created successfully!')
 else:
     print(f'Superuser {username} already exists.')
-" || {
+\"" || {
   echo "⚠️  Superuser creation failed, but continuing..."
 }
 
 echo "🎉 Setup complete! Starting application..."
-echo "🚀 Executing command: $@"
+echo "🚀 Executing command as django user: $@"
 
-# Execute the main command
-exec "$@"
+# Execute the main command as django user
+exec su - django -c "cd /app && $*"
