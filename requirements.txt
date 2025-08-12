@@ -1,0 +1,45 @@
+# Core Django
+Django==4.2.16
+djangorestframework==3.15.2
+django-cors-headers==4.4.0
+
+# Database
+psycopg2-binary==2.9.9
+
+# AWS Services
+boto3==1.35.9
+botocore==1.35.9
+
+# Image Processing
+Pillow==10.4.0
+
+# Data Processing
+pandas==2.2.2
+numpy==1.26.4
+fuzzywuzzy==0.18.0
+python-levenshtein==0.25.1
+
+# Text Processing
+Unidecode==1.3.8
+
+# Environment Variables
+python-decouple==3.8
+
+# HTTP Client
+urllib3==2.2.2
+
+# Date/Time
+python-dateutil==2.9.0.post0
+pytz==2024.1
+
+# Security
+cryptography==43.0.0
+
+# WSGI Server
+gunicorn==23.0.0
+
+# Development Tools (optional)
+# fabric==3.2.2
+
+# System
+six==1.16.0

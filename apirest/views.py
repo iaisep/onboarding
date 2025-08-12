@@ -1,0 +1,200 @@
+from __future__ import unicode_literals
+from rest_framework import generics
+from rest_framework import status
+from rest_framework.response import Response
+from apirest.serializers import llegaSerializer2, llegafaceSerializer2
+from django.http import HttpResponse
+from .codeorm import consult2
+from .AWSocr import consult45
+from .AWScompare import consult46
+from rest_framework import status
+from django.contrib.auth.models import User
+from django.contrib.auth.hashers import check_password
+from rest_framework.decorators import api_view
+from rest_framework.authtoken.models import Token
+from rest_framework.permissions import IsAuthenticated
+from django.utils import timezone
+import logging
+from decouple import config
+
+# Configure logger for API views
+logger = logging.getLogger('apirest.aws')
+
+@api_view(['GET'])
+def health_check(request):
+    """Endpoint de salud para verificar que la API funciona"""
+    logger.info("Health check endpoint accessed")
+    return Response({
+        'status': 'OK',
+        'message': 'API funcionando correctamente',
+        'timestamp': str(timezone.now())
+    })
+
+@api_view(['POST'])
+def login(request):
+    username=request.POST.get('username')
+    password = request.POST.get('password')
+
+    try:
+        user = User.objects.get(username=username)
+    except User.DoesNotExist:
+        return Response('usuario Invalido')
+
+    pwd_valid = check_password(password,user.password)
+    if not pwd_valid:
+        return Response('PSS invalido')
+    token, created = Token.objects.get_or_create(user=user)
+
+    return Response(token.key)
+
+
+
+
+
+
+
+
+
+class restric(generics.CreateAPIView):
+    serializer_class = llegaSerializer2
+    #permission_classes = [IsAuthenticated]
+    def post(self, request, format=None):
+        serializer = llegaSerializer2(data=request.data)
+        if serializer.is_valid():
+            serializer.save()
+            str1 = serializer.data.get("string_income")
+            """llamo a la clase code()"""
+            index2 = consult2()
+            index2.comparar(str1)
+            """recibo los datos en sancionados y los mando a un diccionario"""
+            df_dicts = index2.sancionados.T.to_dict().values()
+            """obtengo la longitud del diccionario"""
+            lendic = len(df_dicts)
+            if lendic == 0:
+                return Response('200_OK_no results found', status=status.HTTP_200_OK, )
+                #return Response('{success_: True} , status=status.HTTP_201_CREATED -no results found')
+            return Response(df_dicts, status=status.HTTP_200_OK,)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+#------------desde aqui las consultas a Face AWS
+
+class ocr2(generics.CreateAPIView):
+    serializer_class = llegafaceSerializer2
+    #permission_classes = [IsAuthenticated]
+    def post(self, request, format=None):
+        logger.info("OCR endpoint accessed")
+        logger.debug(f"Request data keys: {list(request.data.keys())}")
+        
+        serializer = llegafaceSerializer2(data=request.data)
+        if serializer.is_valid():
+            logger.debug("Serializer validation successful")
+            serializer.save()
+            str1 = serializer.data.get("faceselfie")
+            str2 = serializer.data.get("ocrident")
+            
+            logger.info(f"Processing OCR request - faceselfie: {str1}, ocrident: {str2}")
+            
+            # Log detailed parameter analysis
+            logger.debug(f"Parameter analysis:")
+            logger.debug(f"  str1 (faceselfie): '{str1}' - appears to be: {'image file' if str1 and '.' in str1 else 'not a file'}")
+            logger.debug(f"  str2 (ocrident): '{str2}' - appears to be: {'image file' if str2 and '.' in str2 else 'not a file'}")
+            
+            # Determine correct parameters for OCR
+            # OCR needs: photo filename, bucket name
+            # It seems the parameters might be mixed up, let's use the one that looks like a filename
+            if str1 and '.' in str1 and str1.lower().endswith(('.jpg', '.jpeg', '.png')):
+                photo_file = str1
+                logger.debug(f"Using str1 as photo file: {photo_file}")
+            elif str2 and '.' in str2 and str2.lower().endswith(('.jpg', '.jpeg', '.png')):
+                photo_file = str2  
+                logger.debug(f"Using str2 as photo file: {photo_file}")
+            else:
+                logger.error(f"Neither parameter looks like an image file: str1='{str1}', str2='{str2}'")
+                return Response({'error': f'No valid image file found in parameters: faceselfie={str1}, ocrident={str2}'}, 
+                              status=status.HTTP_400_BAD_REQUEST)
+            
+            """llamo a la clase """
+            try:
+                logger.debug("Initializing consult45 OCR class")
+                index2 = consult45()
+                
+                logger.debug("Calling detect_text method")
+                # Use bucket from environment variables instead of hardcoded value
+                bucket_name = config('AWS_S3_BUCKET', default='onboarding-uisep')
+                logger.debug(f"Using bucket from config: {bucket_name}")
+                logger.info(f"Calling OCR with photo='{photo_file}' and bucket='{bucket_name}'")
+                index2.detect_text(photo_file, bucket_name)
+                
+                logger.debug("OCR processing completed, checking for sancionados attribute")
+                if not hasattr(index2, 'sancionados'):
+                    logger.error("OCR class does not have 'sancionados' attribute after processing")
+                    return Response({'error': 'OCR processing failed - no results generated'}, 
+                                  status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                
+                logger.debug("Converting OCR results to dictionary format")
+                df_dicts = index2.sancionados.T.to_dict().values()
+                lendic = len(df_dicts)
+                
+                logger.info(f"OCR processing completed - {lendic} results found")
+                
+                if lendic == 0:
+                    logger.warning("No OCR results found")
+                    return Response('200_OK_no results found', status=status.HTTP_200_OK)
+                
+                logger.info("Returning OCR results successfully")
+                return Response(df_dicts, status=status.HTTP_200_OK)
+                
+            except AttributeError as e:
+                logger.error(f"AttributeError in OCR processing: {str(e)}")
+                return Response({'error': f'OCR processing error: {str(e)}'}, 
+                              status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            except Exception as e:
+                logger.error(f"Unexpected error in OCR processing: {str(e)}")
+                logger.error(f"Exception type: {type(e).__name__}")
+                return Response({'error': f'Unexpected OCR error: {str(e)}'}, 
+                              status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        else:
+            logger.warning(f"Serializer validation failed: {serializer.errors}")
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+class Compare3(generics.CreateAPIView):
+        serializer_class = llegafaceSerializer2
+        #permission_classes = [IsAuthenticated]
+        def post(self, request, format=None):
+            logger.info("Face comparison endpoint accessed")
+            logger.debug(f"Request data keys: {list(request.data.keys())}")
+            
+            serializer = llegafaceSerializer2(data=request.data)
+            if serializer.is_valid():
+                logger.debug("Serializer validation successful for face comparison")
+                serializer.save()
+                str1 = serializer.data.get("faceselfie")
+                str2 = serializer.data.get("ocrident")
+                
+                logger.info(f"Processing face comparison - faceselfie: {str1}, ocrident: {str2}")
+                
+                """llamo a la clase """
+                try:
+                    logger.debug("Initializing consult46 face comparison class")
+                    index3 = consult46()
+                    
+                    logger.debug("Calling compare_faces method")
+                    index3.compare_faces(str1, str2)
+                    
+                    logger.debug("Face comparison completed, processing results")
+                    """recibo los datos en sancionados y los mando a un diccionario"""
+                    df_dicts = index3.comparar.T.to_dict().values()
+
+                    """obtengo la longitud del diccionario"""
+                    lendic = len(df_dicts)
+                    logger.info(f"Face comparison completed - {lendic} results found")
+                    
+                except Exception as e:
+                    logger.error(f"Error in face comparison: {str(e)}")
+                    logger.error(f"Exception type: {type(e).__name__}")
+                    return Response({'error': f'Face comparison error: {str(e)}'}, 
+                                  status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+                if lendic == 0:
+                    return HttpResponse('{success_: True} , status.HTTP_200_OK -no results found')
+                return Response(df_dicts, status=status.HTTP_200_OK)
+            return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
