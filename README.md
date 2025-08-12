@@ -250,10 +250,23 @@ docker-compose up -d
 docker-compose -f docker-compose.external-db.yml up -d
 ```
 
-### Opción 3: Coolify
+### Opción 3: Coolify - BD Incluida
 ```bash
-# Usar configuración incluida para Coolify
-./docker-deploy.sh
+# Configuración tradicional con BD incluida  
+# Subir código y configurar en Coolify dashboard
+git push origin main
+# Usar: docker-compose.coolify.yml
+```
+
+### Opción 4: Coolify - BD Externa
+```bash
+# Preparar configuración para BD externa
+./coolify-external-db.bat     # Windows
+./coolify-external-db.sh      # Linux/macOS
+
+# Subir configuración y usar en Coolify
+git add . && git commit -m "Coolify external DB config" && git push
+# Usar: docker-compose.coolify-external-db.yml
 ```
 
 ### Manual (Desarrollo Local)

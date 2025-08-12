@@ -2,18 +2,33 @@
 
 ## 📋 Resumen de Opciones
 
-Este proyecto ofrece **DOS opciones** de despliegue con Docker según tus necesidades de base de datos:
+Este proyecto ofrece **MÚLTIPLES opciones** de despliegue con Docker según tus necesidades:
 
-### 1. 🏗️ **Despliegue Completo** (Base de datos incluida)
+### 1. 🏗️ **Docker Local Completo** (Base de datos incluida)
 - **Archivo**: `docker-compose.yml`
 - **Incluye**: Django + PostgreSQL + Nginx
+- **Comando**: `docker-deploy.bat` / `deploy.sh`
 - **Ideal para**: Desarrollo, testing, despliegues desde cero
 
-### 2. 🔗 **Despliegue con BD Externa** (Base de datos externa)
+### 2. 🔗 **Docker Local + BD Externa** (Base de datos externa)
 - **Archivo**: `docker-compose.external-db.yml`
 - **Incluye**: Django + Nginx
+- **Comando**: `deploy-external-db.bat` / `deploy-external-db.sh`
 - **Usa**: Base de datos PostgreSQL externa ya configurada
 - **Ideal para**: Producción, cuando ya tienes una BD configurada
+
+### 3. ☁️ **Coolify + BD Incluida** (Hosting gestionado)
+- **Archivo**: `docker-compose.coolify.yml`
+- **Incluye**: Django + PostgreSQL
+- **Plataforma**: Coolify hosting
+- **Ideal para**: Proyectos nuevos en Coolify
+
+### 4. 🚀 **Coolify + BD Externa** (Hosting con BD externa)
+- **Archivo**: `docker-compose.coolify-external-db.yml`
+- **Incluye**: Solo Django
+- **Comando**: `coolify-external-db.bat` / `coolify-external-db.sh`
+- **Usa**: Base de datos externa + hosting Coolify
+- **Ideal para**: Producción empresarial con BD centralizada
 
 ---
 
@@ -88,14 +103,27 @@ services:
 
 ## 📊 Comparación de Opciones
 
-| Característica | Completo | Externa BD |
-|----------------|----------|------------|
-| **Base de datos** | ✅ Incluida | 🔗 Externa |
-| **Recursos** | 🔶 Alto | ✅ Bajo |
-| **Configuración** | ✅ Simple | 🔶 Media |
-| **Producción** | 🔶 Básico | ✅ Escalable |
-| **Backup/Restore** | 🔶 Manual | ✅ Externo |
-| **Alta disponibilidad** | ❌ No | ✅ Posible |
+| Característica | Local Completo | Local + BD Externa | Coolify + BD | Coolify + BD Externa |
+|----------------|----------------|---------------------|--------------|----------------------|
+| **Base de datos** | ✅ Incluida | 🔗 Externa | ✅ Incluida | 🔗 Externa |
+| **Hosting** | 🏠 Local | 🏠 Local | ☁️ Coolify | ☁️ Coolify |
+| **Recursos** | 🔶 Alto | ✅ Bajo | 🔶 Medio | ✅ Mínimo |
+| **Configuración** | ✅ Simple | 🔶 Media | ✅ Simple | 🔶 Media |
+| **Producción** | 🔶 Básico | ✅ Escalable | ✅ Bueno | 🚀 Óptimo |
+| **Backup/Restore** | 🔶 Manual | ✅ Externo | 🔶 Coolify | ✅ Externo |
+| **SSL/HTTPS** | 🔶 Manual | 🔶 Manual | ✅ Automático | ✅ Automático |
+| **Monitoreo** | ❌ No | ❌ No | ✅ Incluido | ✅ Incluido |
+| **Escalabilidad** | ❌ Limitada | 🔶 Media | ✅ Buena | 🚀 Excelente |
+| **Costo** | 🔶 Servidor | 🔶 Servidor | 💰 Hosting | 💰 Hosting |
+
+### 🎯 Recomendaciones por Uso
+
+| Escenario | Opción Recomendada | Razón |
+|-----------|-------------------|--------|
+| **Desarrollo Local** | Local Completo | Setup rápido, datos aislados |
+| **Testing/Staging** | Local + BD Externa | Simula producción |
+| **Producción Pequeña** | Coolify + BD | Hosting gestionado simple |
+| **Producción Empresarial** | Coolify + BD Externa | Máxima escalabilidad y control |
 
 ---
 
@@ -169,6 +197,57 @@ DB_PASSWORD=tu_password
 ./deploy-external-db.bat  # Windows
 # o
 ./deploy-external-db.sh   # Linux/macOS
+```
+
+### Despliegue en Coolify (Con BD Incluida)
+
+```bash
+# 1. Preparar repositorio
+git clone https://github.com/iaisep/onboarding.git
+cd onboarding
+git push origin main
+
+# 2. En Coolify Dashboard:
+#    - Crear nuevo proyecto desde GitHub
+#    - Seleccionar: Docker Compose
+#    - Docker Compose file: docker-compose.coolify.yml
+#    - Agregar variables de entorno
+#    - Deploy
+
+# 3. Variables principales en Coolify:
+# SECRET_KEY=tu-secret-key
+# DB_NAME=bnp
+# DB_USER=postgres_user
+# DB_PASSWORD=strong_password
+# AWS_ACCESS_KEY_ID=tu-aws-key
+# ALLOWED_HOSTS=tu-dominio.com
+```
+
+### Despliegue en Coolify (Con BD Externa)
+
+```bash
+# 1. Preparar configuración
+./coolify-external-db.bat  # Windows  
+./coolify-external-db.sh   # Linux/macOS
+
+# 2. Subir configuración
+git add .
+git commit -m "config: Coolify external DB setup"
+git push origin main
+
+# 3. En Coolify Dashboard:
+#    - Crear nuevo proyecto desde GitHub  
+#    - Seleccionar: Docker Compose
+#    - Docker Compose file: docker-compose.coolify-external-db.yml
+#    - Copiar variables de .env.coolify a Coolify
+#    - Deploy
+
+# 4. Variables principales (desde .env.coolify):
+# DB_HOST=coolify.universidadisep.com
+# DB_PORT=3001
+# DB_NAME=bnp
+# DB_USER=bnp_user
+# DB_PASSWORD=Veronica023_
 ```
 
 ---
