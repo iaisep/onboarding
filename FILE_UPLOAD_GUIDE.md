@@ -4,7 +4,48 @@
 
 ### ✨ Funcionalidades Principales
 - **🔄 Conversión Automática**: Convierte PDF y DOCX a imágenes JPG de alta calidad
-- **🖼️ Optimización de Imágenes**: Redimensiona y optimiza imágenes automáticamente  
+- **🖼️ Optimización de Imágenes**:### 📁 Dependencias
+
+#### Windows Development Environment
+```bash
+pip install PyMuPDF==1.24.10    # PDF conversion
+pip install docx2pdf==0.1.8     # DOCX conversion  
+pip install pywin32==306        # Windows COM for DOCX
+```
+
+#### Linux/Docker Production Environment
+```bash
+pip install PyMuPDF==1.24.10    # PDF conversion only
+# Note: DOCX conversion not supported on Linux
+```
+
+### ⚙️ Variables de Entorno
+```env
+# AWS Configuration
+AWS_ACCESS_KEY_ID=tu_access_key
+AWS_SECRET_ACCESS_KEY=tu_secret_key
+AWS_S3_BUCKET=tu_bucket_name
+AWS_DEFAULT_REGION=us-east-1
+```
+
+### 🖥️ Plataformas Soportadas
+
+#### ✅ Windows (Funcionalidad Completa)
+- **PDF Conversion**: ✅ PyMuPDF
+- **DOCX Conversion**: ✅ docx2pdf + pywin32 COM
+- **Ambiente**: Desarrollo y producción local
+
+#### ⚠️ Linux/Docker (Funcionalidad Limitada)  
+- **PDF Conversion**: ✅ PyMuPDF
+- **DOCX Conversion**: ❌ **No soportada**
+  - Motivo: Requiere Microsoft Office COM (Windows-only)
+  - Error devuelto: "DOCX conversion is not supported on Linux platforms"
+  - Solución: Convertir DOCX a PDF antes de subir
+
+#### 🚀 Recomendaciones de Despliegue
+- **Desarrollo**: Windows con funcionalidad completa
+- **Producción**: Linux/Docker con conversión PDF únicamente
+- **Flujo de trabajo**: Convertir DOCX → PDF → Subir en ambientes Linuxmiza imágenes automáticamente  
 - **☁️ Subida a S3**: Almacena archivos en AWS S3 con nombres únicos
 - **📊 Metadata Completa**: Proporciona información detallada sobre cada archivo
 - **🛡️ Validaciones**: Verifica tipos de archivo y tamaños máximos

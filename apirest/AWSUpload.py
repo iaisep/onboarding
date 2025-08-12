@@ -23,6 +23,20 @@ try:
 except ImportError:
     DOCX_CONVERSION_AVAILABLE = False
 
+# Platform detection for Linux/Docker compatibility
+import platform
+RUNNING_ON_WINDOWS = platform.system() == 'Windows'
+
+# Alternative DOCX handling for Linux
+if not RUNNING_ON_WINDOWS:
+    try:
+        from docx import Document  # python-docx for basic DOCX reading
+        DOCX_READING_AVAILABLE = True
+    except ImportError:
+        DOCX_READING_AVAILABLE = False
+else:
+    DOCX_READING_AVAILABLE = False
+
 # Configure logger for file upload operations
 logger = logging.getLogger('apirest.upload')
 
@@ -155,6 +169,15 @@ class FileUploadS3:
 
     def _convert_docx_to_images(self, docx_content, original_filename):
         """Convert DOCX to images via PDF intermediate"""
+        if not RUNNING_ON_WINDOWS:
+            # On Linux/Docker, DOCX conversion is not supported due to Windows COM dependency
+            logger.error("DOCX conversion not supported on Linux/Docker platforms")
+            raise ValueError(
+                "DOCX conversion requires Windows platform with Microsoft Office or LibreOffice. "
+                "On Linux/Docker, please convert DOCX to PDF manually before uploading, "
+                "or upload the DOCX file directly for text extraction only."
+            )
+        
         if not DOCX_CONVERSION_AVAILABLE:
             raise ImportError("docx2pdf not available for DOCX conversion. Install with: pip install docx2pdf")
         
@@ -298,8 +321,18 @@ class FileUploadS3:
                     converted_images = self._convert_pdf_to_images(file_content, filename)
                     
                 elif file_ext in ['.docx', '.doc']:
-                    # Convert DOCX to images
-                    converted_images = self._convert_docx_to_images(file_content, filename)
+                    # Convert DOCX to images (Windows only)
+                    if RUNNING_ON_WINDOWS:
+                        converted_images = self._convert_docx_to_images(file_content, filename)
+                    else:
+                        # On Linux, DOCX conversion is not supported
+                        error_msg = (
+                            "DOCX conversion is not supported on Linux platforms. "
+                            "This feature requires Microsoft Office COM interface which is Windows-only. "
+                            "Please convert your DOCX files to PDF format before uploading."
+                        )
+                        logger.error(error_msg)
+                        raise ValueError(error_msg)
                     
                 else:
                     raise ValueError(f"Unsupported document type: {file_ext}")
