@@ -19,6 +19,7 @@ from apirest import views
 
 
 urlpatterns = [
+path('', views.health_check),  # Root path for health check
 path('health/', views.health_check),
 path('lists/', views.restric.as_view()),
 path('ocr/', views.ocr2.as_view()),

@@ -27,19 +27,18 @@ RUN pip install --no-cache-dir --upgrade pip \
 # Copy project
 COPY . .
 
-# Create static files directory
-RUN mkdir -p /app/static
+# Create static files directory with proper permissions
+RUN mkdir -p /app/static /app/logs \
+    && chmod 755 /app/static /app/logs
 
-# Create entrypoint script
+# Create entrypoint script with executable permissions
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
 
 # Create non-root user
 RUN addgroup --system django \
-    && adduser --system --group django
-
-# Change ownership of the app directory
-RUN chown -R django:django /app
+    && adduser --system --group django \
+    && chown -R django:django /app
 
 # Switch to non-root user
 USER django
@@ -47,9 +46,9 @@ USER django
 # Expose port
 EXPOSE 8000
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8000/admin/login/ || exit 1
+# Simple health check without admin dependency
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8000/ || exit 1
 
 # Use entrypoint script
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
