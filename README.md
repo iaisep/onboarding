@@ -31,7 +31,7 @@
 
 ```bash
 # Clonar repositorio
-git clone https://github.com/tu-usuario/onboarding.git
+git clone https://github.com/iaisep/onboarding.git
 cd onboarding
 
 # Ejecutar setup automático
@@ -42,7 +42,7 @@ cd onboarding
 
 ```bash
 # Clonar y ejecutar con Docker
-git clone https://github.com/tu-usuario/onboarding.git
+git clone https://github.com/iaisep/onboarding.git
 cd onboarding
 
 # Desplegar con Docker Compose
