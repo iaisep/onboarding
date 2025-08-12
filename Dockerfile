@@ -27,9 +27,9 @@ RUN pip install --no-cache-dir --upgrade pip \
 # Copy project
 COPY . .
 
-# Create non-root user first
+# Create non-root user first with proper shell and home directory
 RUN addgroup --system django \
-    && adduser --system --group django
+    && adduser --system --group --home /home/django --shell /bin/bash django
 
 # Create directories and set proper permissions
 RUN mkdir -p /app/static /app/logs \

@@ -158,18 +158,18 @@ echo "✅ Log files permissions configured!"
 
 # Test Python/Django setup (as django user)
 echo "🧪 Testing Django setup..."
-su - django -c "cd /app && python manage.py check --deploy" || {
+runuser -u django --preserve-environment -- python /app/manage.py check --deploy || {
   echo "⚠️  Django check failed, but continuing..."
 }
 
 # Run database migrations with verbose output (as django user)
 echo "🔄 Running database migrations..."
-su - django -c "cd /app && python manage.py makemigrations --verbosity=2 --noinput" || {
+runuser -u django --preserve-environment -- python /app/manage.py makemigrations --verbosity=2 --noinput || {
   echo "❌ makemigrations failed"
   exit 1
 }
 
-su - django -c "cd /app && python manage.py migrate --verbosity=2 --noinput" || {
+runuser -u django --preserve-environment -- python /app/manage.py migrate --verbosity=2 --noinput || {
   echo "❌ migrate failed"
   exit 1
 }
@@ -177,18 +177,14 @@ echo "✅ Migrations completed successfully!"
 
 # Collect static files (as django user)
 echo "📁 Collecting static files..."
-su - django -c "cd /app && python manage.py collectstatic --noinput --verbosity=2" || {
+runuser -u django --preserve-environment -- python /app/manage.py collectstatic --noinput --verbosity=2 || {
   echo "⚠️  collectstatic failed, but continuing..."
 }
 
 # Create superuser if it doesn't exist (as django user)
 echo "👤 Creating superuser if needed..."
-su - django -c "cd /app && python -c \"
+runuser -u django --preserve-environment -- python /app/manage.py shell -c "
 import os
-import django
-os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'apibase.settings')
-django.setup()
-
 from django.contrib.auth import get_user_model
 
 User = get_user_model()
@@ -201,12 +197,13 @@ if not User.objects.filter(username=username).exists():
     print(f'Superuser {username} created successfully!')
 else:
     print(f'Superuser {username} already exists.')
-\"" || {
+" || {
   echo "⚠️  Superuser creation failed, but continuing..."
 }
 
 echo "🎉 Setup complete! Starting application..."
 echo "🚀 Executing command as django user: $@"
 
-# Execute the main command as django user
-exec su - django -c "cd /app && $*"
+# Execute the main command as django user with proper working directory
+cd /app
+exec runuser -u django --preserve-environment -- "$@"
