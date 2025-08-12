@@ -38,15 +38,27 @@ cd onboarding
 ./quick-start.bat
 ```
 
-### Opción 2: Docker
+### Opción 2: Docker con BD Incluida
 
 ```bash
-# Clonar y ejecutar con Docker
+# Clonar y ejecutar con Docker (BD incluida)
 git clone https://github.com/iaisep/onboarding.git
 cd onboarding
 
-# Desplegar con Docker Compose
-docker-compose up -d
+# Desplegar todo
+./docker-deploy.bat
+```
+
+### Opción 3: Docker con BD Externa
+
+```bash
+# Clonar repositorio
+git clone https://github.com/iaisep/onboarding.git
+cd onboarding
+
+# Configurar .env con tu BD externa
+# Luego desplegar
+./deploy-external-db.bat
 ```
 
 ## ⚙️ Configuración
@@ -218,18 +230,33 @@ python log_analyzer.py --level ERROR
 
 ## 🐳 Despliegue
 
-### Coolify
+### Opción 1: Docker - Base de Datos Incluida
 ```bash
-# Usar configuración incluida
+# Despliegue completo (Django + PostgreSQL + Nginx)
+./docker-deploy.bat     # Windows  
+./deploy.sh            # Linux/macOS
+
+# O manualmente
+docker-compose up -d
+```
+
+### Opción 2: Docker - Base de Datos Externa
+```bash
+# Usa base de datos externa (configurada en .env)
+./deploy-external-db.bat     # Windows
+./deploy-external-db.sh      # Linux/macOS
+
+# O manualmente  
+docker-compose -f docker-compose.external-db.yml up -d
+```
+
+### Opción 3: Coolify
+```bash
+# Usar configuración incluida para Coolify
 ./docker-deploy.sh
 ```
 
-### Docker Compose
-```bash
-docker-compose -f docker-compose.yml up -d
-```
-
-### Manual
+### Manual (Desarrollo Local)
 ```bash
 # Setup base de datos
 ./setup-db.bat
@@ -240,6 +267,10 @@ docker-compose -f docker-compose.yml up -d
 # Ejecutar servidor
 ./start-local.bat
 ```
+
+**📚 Documentación Detallada:**
+- [Guía Completa de Opciones Docker](DOCKER_DEPLOYMENT_OPTIONS.md)
+- [Despliegue en Coolify](COOLIFY_DEPLOYMENT.md)
 
 ## 🔧 Herramientas de Desarrollo
 
