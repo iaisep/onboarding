@@ -77,8 +77,73 @@ AWS_DEFAULT_REGION=us-east-1
 | `/health/` | GET | Estado de la API |
 | `/ocr/` | POST | Procesamiento OCR (procesado) |
 | `/ocr-raw/` | POST | OCR con respuesta completa de AWS |
+| `/upload/` | POST | Subir archivos a S3 con conversión automática |
 | `/face/` | POST | Comparación facial |
 | `/lists/` | POST | Lista de sancionados |
+
+### Ejemplo de Uso - Subida de Archivos (Nuevo)
+
+**Subir imagen directamente:**
+```bash
+curl -X POST http://localhost:8000/upload/ \
+  -H "Content-Type: multipart/form-data" \
+  -F "file=@documento.jpg"
+```
+
+**Subir PDF (se convierte automáticamente a imágenes):**
+```bash
+curl -X POST http://localhost:8000/upload/ \
+  -H "Content-Type: multipart/form-data" \
+  -F "file=@documento.pdf"
+```
+
+**Subir DOCX (se convierte automáticamente a imágenes):**
+```bash
+curl -X POST http://localhost:8000/upload/ \
+  -H "Content-Type: multipart/form-data" \
+  -F "file=@documento.docx"
+```
+
+**Respuesta de subida exitosa:**
+```json
+{
+  "success": true,
+  "error": null,
+  "error_code": null,
+  "uploaded_files": [
+    {
+      "original_filename": "documento.pdf",
+      "s3_filename": "20250812_143022_a1b2c3d4_documento_page_1.jpg",
+      "file_type": "converted_image",
+      "page_number": 1,
+      "size": 245760,
+      "url": "https://onboarding-uisep.s3.us-east-1.amazonaws.com/20250812_143022_a1b2c3d4_documento_page_1.jpg"
+    },
+    {
+      "original_filename": "documento.pdf", 
+      "s3_filename": "20250812_143022_b2c3d4e5_documento_page_2.jpg",
+      "file_type": "converted_image",
+      "page_number": 2,
+      "size": 198432,
+      "url": "https://onboarding-uisep.s3.us-east-1.amazonaws.com/20250812_143022_b2c3d4e5_documento_page_2.jpg"
+    }
+  ],
+  "metadata": {
+    "original_filename": "documento.pdf",
+    "original_file_type": "document",
+    "original_extension": ".pdf",
+    "total_files_uploaded": 2,
+    "bucket": "onboarding-uisep",
+    "upload_timestamp": "2025-08-12T14:30:22"
+  }
+}
+```
+
+**Tipos de archivo soportados:**
+- **Imágenes**: JPG, JPEG, PNG, BMP, TIFF
+- **Documentos**: PDF, DOCX, DOC (se convierten a imágenes JPG)
+- **Tamaño máximo**: 50MB por archivo
+- **Conversión**: Alta calidad, sin degradación
 
 ### Ejemplo de Uso - OCR Procesado
 

@@ -50,3 +50,29 @@ class RestrictivaSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
 
+class FileUploadSerializer(serializers.Serializer):
+    """
+    Serializer para manejar la subida de archivos
+    Acepta archivos PDF, DOCX, DOC, JPG, JPEG, PNG
+    """
+    file = serializers.FileField(
+        help_text="Archivo a subir (PDF, DOCX, DOC, JPG, JPEG, PNG)",
+        required=True
+    )
+    
+    def validate_file(self, value):
+        """Validate uploaded file"""
+        # Check file size (max 50MB)
+        max_size = 50 * 1024 * 1024  # 50MB
+        if value.size > max_size:
+            raise serializers.ValidationError(f"File too large. Maximum size is 50MB, got {value.size / 1024 / 1024:.2f}MB")
+        
+        # Check file extension
+        allowed_extensions = ['.pdf', '.docx', '.doc', '.jpg', '.jpeg', '.png', '.bmp', '.tiff']
+        file_extension = value.name.lower().split('.')[-1]
+        if f'.{file_extension}' not in allowed_extensions:
+            raise serializers.ValidationError(f"Unsupported file type: .{file_extension}. Allowed: {allowed_extensions}")
+        
+        return value
+
+

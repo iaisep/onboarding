@@ -2,12 +2,13 @@ from __future__ import unicode_literals
 from rest_framework import generics
 from rest_framework import status
 from rest_framework.response import Response
-from apirest.serializers import llegaSerializer2, llegafaceSerializer2
+from apirest.serializers import llegaSerializer2, llegafaceSerializer2, FileUploadSerializer
 from django.http import HttpResponse
 from .codeorm import consult2
 from .AWSocr import consult45
 from .AWSocrRaw import consult45Raw
 from .AWScompare import consult46
+from .AWSUpload import FileUploadS3
 from rest_framework import status
 from django.contrib.auth.models import User
 from django.contrib.auth.hashers import check_password
@@ -288,4 +289,79 @@ class ocrRaw(generics.CreateAPIView):
                 'error_code': '400_Validation_Error',
                 'validation_errors': serializer.errors,
                 'raw_response': None
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class FileUploadView(generics.CreateAPIView):
+    """
+    Endpoint para subir archivos a S3 con conversión automática
+    Acepta: PDF, DOCX, DOC, JPG, JPEG, PNG, BMP, TIFF
+    Convierte documentos a imágenes JPG de alta calidad
+    """
+    serializer_class = FileUploadSerializer
+    #permission_classes = [IsAuthenticated]
+    
+    def post(self, request, format=None):
+        logger.info("File upload endpoint accessed")
+        logger.debug(f"Upload request files: {list(request.FILES.keys())}")
+        
+        serializer = FileUploadSerializer(data=request.data)
+        if serializer.is_valid():
+            logger.debug("File upload serializer validation successful")
+            
+            try:
+                # Get uploaded file
+                uploaded_file = serializer.validated_data['file']
+                filename = uploaded_file.name
+                file_content = uploaded_file.read()
+                
+                logger.info(f"Processing file upload - Name: {filename}, Size: {len(file_content)} bytes")
+                logger.debug(f"File details - Content type: {uploaded_file.content_type}, Size: {uploaded_file.size}")
+                
+                # Initialize file upload handler
+                logger.debug("Initializing FileUploadS3 class")
+                uploader = FileUploadS3()
+                
+                # Upload file with automatic conversion
+                logger.info(f"Starting upload process for: {filename}")
+                result = uploader.upload_file(file_content, filename)
+                
+                logger.info(f"Upload process completed - Success: {result.get('success', False)}")
+                
+                if result.get('success'):
+                    uploaded_files = result.get('uploaded_files', [])
+                    logger.info(f"Upload successful - {len(uploaded_files)} files uploaded to S3")
+                    
+                    # Log each uploaded file
+                    for file_info in uploaded_files:
+                        logger.info(f"Uploaded: {file_info['s3_filename']} ({file_info['size']} bytes)")
+                    
+                    return Response(result, status=status.HTTP_201_CREATED)
+                else:
+                    logger.error(f"Upload failed: {result.get('error', 'Unknown error')}")
+                    return Response(result, status=status.HTTP_400_BAD_REQUEST)
+                
+            except Exception as e:
+                logger.error(f"Unexpected error in file upload: {str(e)}")
+                logger.error(f"Exception type: {type(e).__name__}")
+                
+                error_response = {
+                    'success': False,
+                    'error': f'Unexpected upload error: {str(e)}',
+                    'error_code': '500_Upload_Unexpected_Error',
+                    'uploaded_files': [],
+                    'metadata': {
+                        'filename': filename if 'filename' in locals() else 'unknown',
+                        'exception_type': type(e).__name__
+                    }
+                }
+                return Response(error_response, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        else:
+            logger.warning(f"File upload serializer validation failed: {serializer.errors}")
+            return Response({
+                'success': False,
+                'error': 'Invalid file upload data',
+                'error_code': '400_Upload_Validation_Error',
+                'validation_errors': serializer.errors,
+                'uploaded_files': []
             }, status=status.HTTP_400_BAD_REQUEST)

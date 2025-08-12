@@ -13,6 +13,11 @@ botocore==1.35.9
 # Image Processing
 Pillow==10.4.0
 
+# Document Conversion
+PyMuPDF==1.24.10
+docx2pdf==0.1.8
+pywin32==306
+
 # Data Processing
 pandas==2.2.2
 numpy==1.26.4
