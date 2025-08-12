@@ -1,158 +1,189 @@
-# BNP Django REST API
+# 🎯 Onboarding API - Django OCR & Face Recognition
 
-A Django REST API project for document OCR, face recognition, and restricted list checking using AWS services.
+> **Sistema de procesamiento de documentos con OCR y reconocimiento facial usando AWS Rekognition**
 
-## Features
+![Django](https://img.shields.io/badge/Django-4.2.16-green.svg)
+![Python](https://img.shields.io/badge/Python-3.12-blue.svg)
+![AWS](https://img.shields.io/badge/AWS-Rekognition-orange.svg)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Latest-blue.svg)
+![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)
 
-- OCR document processing using AWS Textract
-- Face comparison and recognition using AWS Rekognition
-- Restricted list checking with fuzzy matching
-- PostgreSQL database support
-- RESTful API endpoints
+## 🚀 Características Principales
 
-## Requirements
+- **✅ OCR Inteligente**: Extracción de datos de cédulas panameñas usando AWS Rekognition
+- **👤 Comparación Facial**: Verificación de identidad con AWS Rekognition
+- **🔒 Seguridad**: Gestión segura de credenciales AWS con variables de entorno
+- **📊 Sistema de Logs**: Monitoreo completo de errores y operaciones
+- **🐳 Docker**: Listo para despliegue con Docker y Coolify
+- **🗄️ PostgreSQL**: Base de datos robusta y escalable
+- **⚡ REST API**: Endpoints RESTful con Django REST Framework
 
-- Python 3.8+
+## 📋 Requisitos
+
+- Python 3.12+
 - PostgreSQL 12+
-- AWS Account with Rekognition and S3 access
+- Docker (opcional)
+- Credenciales AWS (Rekognition, S3)
 
-## Setup Instructions
+## 🛠️ Instalación Rápida
 
-### 1. Environment Setup
+### Opción 1: Setup Local
 
-1. Clone the repository:
-   ```bash
-   git clone <repository-url>
-   cd bnp-main
-   ```
-
-2. Create a virtual environment:
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
-
-3. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-### 2. Database Setup (PostgreSQL)
-
-1. Install PostgreSQL and create a database:
-   ```sql
-   CREATE DATABASE bnp;
-   CREATE USER your_db_user WITH PASSWORD 'your_password';
-   GRANT ALL PRIVILEGES ON DATABASE bnp TO your_db_user;
-   ```
-
-### 3. Environment Configuration
-
-1. Copy the environment template:
-   ```bash
-   cp .env.example .env
-   ```
-
-2. Update `.env` file with your actual values:
-   - Database credentials
-   - AWS credentials
-   - Secret key (generate a new one for production)
-
-### 4. Django Setup
-
-1. Run migrations:
-   ```bash
-   python manage.py makemigrations
-   python manage.py migrate
-   ```
-
-2. Create superuser:
-   ```bash
-   python manage.py createsuperuser
-   ```
-
-3. Collect static files:
-   ```bash
-   python manage.py collectstatic
-   ```
-
-### 5. AWS Configuration
-
-1. Set up AWS S3 buckets:
-   - Main bucket for file storage
-   - Face bucket for face recognition
-   - Image bucket for image processing
-
-2. Configure AWS IAM with necessary permissions:
-   - S3 read/write access
-   - Rekognition access
-   - Textract access
-
-## API Endpoints
-
-- `/lists/` - POST - Restricted list checking
-- `/ocr/` - POST - OCR document processing
-- `/face/` - POST - Face comparison
-- `/login/` - POST - User authentication
-- `/admin/` - Django admin interface
-
-## Deployment
-
-### Development
 ```bash
-python manage.py runserver
+# Clonar repositorio
+git clone https://github.com/tu-usuario/onboarding.git
+cd onboarding
+
+# Ejecutar setup automático
+./quick-start.bat
 ```
 
-### Production
+### Opción 2: Docker
+
 ```bash
-gunicorn apibase.wsgi:application
+# Clonar y ejecutar con Docker
+git clone https://github.com/tu-usuario/onboarding.git
+cd onboarding
+
+# Desplegar con Docker Compose
+docker-compose up -d
 ```
 
-## Migration from MySQL to PostgreSQL
+## ⚙️ Configuración
 
-If migrating from an existing MySQL database:
+### Variables de Entorno
 
-1. Export data from MySQL:
-   ```bash
-   python manage.py dumpdata > data.json
-   ```
+Copia `.env.example` a `.env` y configura:
 
-2. Update database settings in `.env`
+```env
+# Database
+DB_NAME=tu_base_datos
+DB_USER=tu_usuario
+DB_PASSWORD=tu_password
+DB_HOST=tu_host
+DB_PORT=5432
 
-3. Run migrations:
-   ```bash
-   python manage.py migrate
-   ```
+# AWS Credentials
+AWS_ACCESS_KEY_ID=tu_access_key
+AWS_SECRET_ACCESS_KEY=tu_secret_key
+AWS_S3_BUCKET=tu_bucket
+AWS_DEFAULT_REGION=us-east-1
+```
 
-4. Load data:
-   ```bash
-   python manage.py loaddata data.json
-   ```
+## 📚 API Endpoints
 
-## Security Notes
+| Endpoint | Método | Descripción |
+|----------|---------|-------------|
+| `/api/health/` | GET | Estado de la API |
+| `/api/ocr/` | POST | Procesamiento OCR |
+| `/api/face-compare/` | POST | Comparación facial |
+| `/api/restricted/` | GET | Lista de sancionados |
 
-- Never commit `.env` file to version control
-- Use strong passwords for database and secret keys
-- Rotate AWS credentials regularly
-- Enable HTTPS in production
-- Update allowed hosts for production domains
+### Ejemplo de Uso - OCR
 
-## Environment Variables
+```bash
+curl -X POST http://localhost:8000/api/ocr/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "faceselfie": "selfie.jpg",
+    "ocrident": "cedula.jpg"
+  }'
+```
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `DEBUG` | Debug mode | `False` |
-| `SECRET_KEY` | Django secret key | Required |
-| `DB_NAME` | Database name | `bnp` |
-| `DB_USER` | Database user | `postgres` |
-| `DB_PASSWORD` | Database password | Required |
-| `DB_HOST` | Database host | `localhost` |
-| `DB_PORT` | Database port | `5432` |
-| `AWS_ACCESS_KEY_ID` | AWS access key | Required |
-| `AWS_SECRET_ACCESS_KEY` | AWS secret key | Required |
-| `AWS_DEFAULT_REGION` | AWS region | `us-east-1` |
-| `ALLOWED_HOSTS` | Comma-separated hosts | `localhost` |
+## 📊 Sistema de Monitoreo
 
-## Support
+### Ver Logs en Tiempo Real
+```bash
+# Monitor general
+monitor-logs.bat
 
-For deployment issues or questions, check the Django documentation or AWS service documentation.
+# Análisis de logs
+python log_analyzer.py --summary
+python log_analyzer.py --level ERROR
+```
+
+### Archivos de Logs
+- `logs/django.log`: Logs generales
+- `logs/aws_errors.log`: Logs específicos de AWS
+
+## 🐳 Despliegue
+
+### Coolify
+```bash
+# Usar configuración incluida
+./docker-deploy.sh
+```
+
+### Docker Compose
+```bash
+docker-compose -f docker-compose.yml up -d
+```
+
+### Manual
+```bash
+# Setup base de datos
+./setup-db.bat
+
+# Inicializar datos
+./init-data.bat
+
+# Ejecutar servidor
+./start-local.bat
+```
+
+## 🔧 Herramientas de Desarrollo
+
+- `setup_logging.py`: Configurar sistema de logs
+- `debug_ocr_params.py`: Debugging de OCR
+- `log_analyzer.py`: Análisis avanzado de logs
+- `fix_pandas.py`: Corrección de dependencias
+
+## 📁 Estructura del Proyecto
+
+```
+onboarding/
+├── apibase/           # Configuración Django
+├── apirest/           # API REST
+│   ├── AWSocr.py     # Procesamiento OCR
+│   ├── AWScompare.py # Comparación facial
+│   └── views.py      # Endpoints API
+├── logs/              # Sistema de logs
+├── requirements.txt   # Dependencias
+├── Dockerfile        # Docker configuration
+└── docker-compose.yml
+```
+
+## 🛡️ Seguridad
+
+- ✅ Credenciales AWS en variables de entorno
+- ✅ Validación de parámetros de entrada
+- ✅ Manejo seguro de errores
+- ✅ Logs de auditoría completos
+
+## 🤝 Contribuir
+
+1. Fork el proyecto
+2. Crea tu rama (`git checkout -b feature/AmazingFeature`)
+3. Commit tus cambios (`git commit -m 'Add AmazingFeature'`)
+4. Push a la rama (`git push origin feature/AmazingFeature`)
+5. Abre un Pull Request
+
+## 📋 Estado del Proyecto
+
+- [x] ✅ Migración a PostgreSQL
+- [x] ✅ Integración AWS segura
+- [x] ✅ Sistema de logging completo
+- [x] ✅ Docker y Coolify ready
+- [x] ✅ OCR de cédulas panameñas
+- [x] ✅ Comparación facial
+- [ ] 🔄 Tests automatizados
+- [ ] 🔄 CI/CD pipeline
+
+## 📞 Soporte
+
+- 📧 Email: maikel@universidadisep.com
+- 🌐 Web: universidadisep.com
+
+---
+
+**⭐ Si este proyecto te ayuda, ¡dale una estrella!**
