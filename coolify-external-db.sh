@@ -118,7 +118,7 @@ DJANGO_SUPERUSER_EMAIL=${DJANGO_SUPERUSER_EMAIL:-admin@example.com}
 DJANGO_SUPERUSER_PASSWORD=${DJANGO_SUPERUSER_PASSWORD:-admin123}
 
 # Coolify Specific
-PORT=8000
+PORT=8082
 COOLIFY_URL=\${COOLIFY_FQDN}
 COOLIFY_BRANCH=main
 EOF
@@ -178,3 +178,5 @@ echo
 echo "📚 Documentacion completa en:"
 echo "   - COOLIFY_DEPLOYMENT.md"
 echo "   - DOCKER_DEPLOYMENT_OPTIONS.md"
+echo
+echo "🚀 PUERTO CONFIGURADO: 8082 (evita conflicto con puerto 8000)"

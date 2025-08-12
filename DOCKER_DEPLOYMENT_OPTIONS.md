@@ -248,6 +248,7 @@ git push origin main
 # DB_NAME=bnp
 # DB_USER=bnp_user
 # DB_PASSWORD=Veronica023_
+# PORT=8082  # Puerto para evitar conflicto con 8000
 ```
 
 ---

@@ -106,11 +106,11 @@ DJANGO_SUPERUSER_EMAIL=admin@yourdomain.com
 DJANGO_SUPERUSER_PASSWORD=secure_admin_password
 ```
 
-### 4. Configurar Docker Compose
+### 4. Configurar Docker Compose - BD Incluida
 
 En Coolify:
 1. **Set Docker Compose file** a `docker-compose.coolify.yml`
-2. **Configure Port** - usualmente 8000
+2. **Configure Port** - usualmente 8082 (evita conflicto con 8000)
 3. **Set Health Check** - endpoint `/admin/login/`
 
 ### 5. Configurar Base de Datos
@@ -215,7 +215,7 @@ FACE_MIN_CONFIDENCE=95
 
 #### Coolify Specific
 ```
-PORT=8000
+PORT=8082
 COOLIFY_URL=${COOLIFY_FQDN}
 COOLIFY_BRANCH=main
 ```
