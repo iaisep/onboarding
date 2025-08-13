@@ -2,13 +2,14 @@ from __future__ import unicode_literals
 from rest_framework import generics
 from rest_framework import status
 from rest_framework.response import Response
-from apirest.serializers import llegaSerializer2, llegafaceSerializer2, FileUploadSerializer
+from apirest.serializers import llegaSerializer2, llegafaceSerializer2, FileUploadSerializer, TextractAnalysisSerializer
 from django.http import HttpResponse
 from .codeorm import consult2
 from .AWSocr import consult45
 from .AWSocrRaw import consult45Raw
 from .AWScompare import consult46
 from .AWSUpload import FileUploadS3
+from .AWSTextract import TextractIDAnalyzer
 from rest_framework import status
 from django.contrib.auth.models import User
 from django.contrib.auth.hashers import check_password
@@ -364,4 +365,166 @@ class FileUploadView(generics.CreateAPIView):
                 'error_code': '400_Upload_Validation_Error',
                 'validation_errors': serializer.errors,
                 'uploaded_files': []
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class TextractIDAnalysisView(generics.CreateAPIView):
+    """
+    Endpoint para análisis de documentos de identidad con AWS Textract
+    Utiliza la función analyze_id optimizada para cédulas, pasaportes, licencias
+    """
+    serializer_class = TextractAnalysisSerializer
+    #permission_classes = [IsAuthenticated]
+    
+    def post(self, request, format=None):
+        logger.info("Textract ID Analysis endpoint accessed")
+        logger.debug(f"Textract ID request data: {request.data}")
+        
+        serializer = TextractAnalysisSerializer(data=request.data)
+        if serializer.is_valid():
+            logger.debug("Textract ID serializer validation successful")
+            
+            try:
+                # Get validated data
+                document_name = serializer.validated_data['document_name']
+                analysis_type = serializer.validated_data.get('analysis_type', 'id_document')
+                bucket_name = serializer.validated_data.get('bucket_name', None)
+                
+                logger.info(f"Processing Textract ID analysis - Document: {document_name}, Type: {analysis_type}")
+                logger.debug(f"Bucket: {bucket_name or 'default bucket'}")
+                
+                # Initialize Textract analyzer
+                logger.debug("Initializing TextractIDAnalyzer")
+                analyzer = TextractIDAnalyzer()
+                
+                # Perform analysis based on type
+                if analysis_type == 'id_document':
+                    logger.info("Performing ID document analysis with analyze_id")
+                    result = analyzer.analyze_id_document(document_name, bucket_name)
+                else:
+                    logger.info("Performing general document analysis with detect_document_text")
+                    result = analyzer.analyze_general_document(document_name, bucket_name)
+                
+                logger.info(f"Textract analysis completed - Success: {result.get('success', False)}")
+                
+                if result.get('success'):
+                    # Add DataFrame results for consistency with other endpoints
+                    if hasattr(analyzer, 'extracted_data') and not analyzer.extracted_data.empty:
+                        df_dicts = analyzer.extracted_data.T.to_dict().values()
+                        result['dataframe_results'] = list(df_dicts)
+                        logger.info(f"Added DataFrame results: {len(result['dataframe_results'])} records")
+                    else:
+                        result['dataframe_results'] = []
+                        logger.info("No DataFrame results available")
+                    
+                    return Response(result, status=status.HTTP_200_OK)
+                else:
+                    logger.error(f"Textract analysis failed: {result.get('error', 'Unknown error')}")
+                    return Response(result, status=status.HTTP_400_BAD_REQUEST)
+                
+            except Exception as e:
+                logger.error(f"Unexpected error in Textract ID analysis: {str(e)}")
+                logger.error(f"Exception type: {type(e).__name__}")
+                
+                error_response = {
+                    'success': False,
+                    'error': f'Unexpected Textract error: {str(e)}',
+                    'error_code': '500_Textract_Unexpected_Error',
+                    'document_name': document_name if 'document_name' in locals() else 'unknown',
+                    'extracted_fields': [],
+                    'raw_response': None
+                }
+                return Response(error_response, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        else:
+            logger.warning(f"Textract ID serializer validation failed: {serializer.errors}")
+            return Response({
+                'success': False,
+                'error': 'Invalid request data for Textract analysis',
+                'error_code': '400_Textract_Validation_Error',
+                'validation_errors': serializer.errors,
+                'extracted_fields': []
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class TextractGeneralAnalysisView(generics.CreateAPIView):
+    """
+    Endpoint para análisis general de documentos con AWS Textract
+    Utiliza detect_document_text para extraer todo el texto de cualquier documento
+    """
+    serializer_class = TextractAnalysisSerializer
+    #permission_classes = [IsAuthenticated]
+    
+    def post(self, request, format=None):
+        logger.info("Textract General Analysis endpoint accessed")
+        logger.debug(f"Textract General request data: {request.data}")
+        
+        serializer = TextractAnalysisSerializer(data=request.data)
+        if serializer.is_valid():
+            logger.debug("Textract General serializer validation successful")
+            
+            try:
+                # Get validated data
+                document_name = serializer.validated_data['document_name']
+                bucket_name = serializer.validated_data.get('bucket_name', None)
+                
+                logger.info(f"Processing Textract general analysis - Document: {document_name}")
+                logger.debug(f"Bucket: {bucket_name or 'default bucket'}")
+                
+                # Initialize Textract analyzer
+                logger.debug("Initializing TextractIDAnalyzer for general analysis")
+                analyzer = TextractIDAnalyzer()
+                
+                # Perform general document analysis
+                logger.info("Performing general document analysis with detect_document_text")
+                result = analyzer.analyze_general_document(document_name, bucket_name)
+                
+                logger.info(f"Textract general analysis completed - Success: {result.get('success', False)}")
+                
+                if result.get('success'):
+                    # Add DataFrame results for consistency
+                    if hasattr(analyzer, 'extracted_data') and not analyzer.extracted_data.empty:
+                        df_dicts = analyzer.extracted_data.T.to_dict().values()
+                        result['dataframe_results'] = list(df_dicts)
+                        logger.info(f"Added DataFrame results: {len(result['dataframe_results'])} records")
+                    else:
+                        result['dataframe_results'] = []
+                        logger.info("No DataFrame results available")
+                    
+                    # Add summary statistics
+                    result['analysis_summary'] = {
+                        'total_text_blocks': result.get('total_blocks', 0),
+                        'total_lines': result.get('total_lines', 0),
+                        'total_words': result.get('total_words', 0),
+                        'full_text_length': len(result.get('full_text', '')),
+                        'document_type': 'general_document'
+                    }
+                    
+                    return Response(result, status=status.HTTP_200_OK)
+                else:
+                    logger.error(f"Textract general analysis failed: {result.get('error', 'Unknown error')}")
+                    return Response(result, status=status.HTTP_400_BAD_REQUEST)
+                
+            except Exception as e:
+                logger.error(f"Unexpected error in Textract general analysis: {str(e)}")
+                logger.error(f"Exception type: {type(e).__name__}")
+                
+                error_response = {
+                    'success': False,
+                    'error': f'Unexpected Textract error: {str(e)}',
+                    'error_code': '500_Textract_General_Unexpected_Error',
+                    'document_name': document_name if 'document_name' in locals() else 'unknown',
+                    'text_blocks': [],
+                    'full_text': '',
+                    'raw_response': None
+                }
+                return Response(error_response, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        else:
+            logger.warning(f"Textract General serializer validation failed: {serializer.errors}")
+            return Response({
+                'success': False,
+                'error': 'Invalid request data for Textract general analysis',
+                'error_code': '400_Textract_General_Validation_Error',
+                'validation_errors': serializer.errors,
+                'text_blocks': [],
+                'full_text': ''
             }, status=status.HTTP_400_BAD_REQUEST)

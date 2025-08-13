@@ -76,3 +76,45 @@ class FileUploadSerializer(serializers.Serializer):
         return value
 
 
+class TextractAnalysisSerializer(serializers.Serializer):
+    """
+    Serializer para análisis de documentos con AWS Textract
+    Procesa documentos ya subidos al bucket S3
+    """
+    document_name = serializers.CharField(
+        max_length=255,
+        help_text="Nombre del archivo en el bucket S3 (ej: 20250812_143022_a1b2c3d4_cedula.jpg)",
+        required=True
+    )
+    
+    analysis_type = serializers.ChoiceField(
+        choices=[
+            ('id_document', 'Análisis de documento de identidad (analyze_id)'),
+            ('general_document', 'Análisis de documento general (detect_document_text)')
+        ],
+        default='id_document',
+        help_text="Tipo de análisis a realizar",
+        required=False
+    )
+    
+    bucket_name = serializers.CharField(
+        max_length=255,
+        help_text="Nombre del bucket S3 (opcional, usa el bucket por defecto si no se especifica)",
+        required=False,
+        allow_blank=True
+    )
+    
+    def validate_document_name(self, value):
+        """Validate document name format"""
+        if not value:
+            raise serializers.ValidationError("Document name cannot be empty")
+        
+        # Check for valid file extensions for Textract
+        allowed_extensions = ['.jpg', '.jpeg', '.png', '.pdf']
+        file_extension = f".{value.lower().split('.')[-1]}"
+        if file_extension not in allowed_extensions:
+            raise serializers.ValidationError(f"Unsupported file type for Textract: {file_extension}. Allowed: {allowed_extensions}")
+        
+        return value
+
+
