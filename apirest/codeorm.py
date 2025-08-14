@@ -28,7 +28,7 @@ class consult2:
                     nuevo_registro = {'id': int(name.id), 'nombres': ca,
                                       'Puntos': result, 'Lista_Sanciones': listas,
                                       'Prospecto': n1}
-                    df = df.append(nuevo_registro, ignore_index=True)
+                    df = pd.concat([df, pd.DataFrame([nuevo_registro])], ignore_index=True)
                     self.sancionados = df[df.Puntos != 0]
                 else:
                     pass
