@@ -61,6 +61,10 @@ services:
       - "coolify.service=onboarding-api"
       - "coolify.database=external"
 
+    dns:
+      - 8.8.8.8
+      - 1.1.1.1
+
 volumes:
   static_volume:
 
