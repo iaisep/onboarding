@@ -11,27 +11,27 @@ class consult2:
         self.name_algo = n + ' p'
         return name_algo
 
-    def comparar(self,n1):
+    def comparar(self, n1):
         indices = [0]
-        sancionados = {'nombres': "", 'Puntos': 0, 'Lista_Sanciones': "", 'Prospecto': ''}
+        sancionados = {'nombres': "", 'Puntos': 0, 'Base_de_Datos': "", 'Prospecto': ''}
         puntos = int(puntaje.objects.get(pk=1).puntaje_Max)
         df = pd.DataFrame(data=sancionados, index=indices)
         self.sancionados = df
         for name in restrictiva.objects.all():
-                c = str(name.name)
-                ca = c.upper()
-                a = str(n1)
-                aa = a.upper()
-                listas = name.list
-                result = fuzz.partial_ratio(aa, ca)
-                if result >= puntos:
-                    nuevo_registro = {'id': int(name.id), 'nombres': ca,
-                                      'Puntos': result, 'Lista_Sanciones': listas,
-                                      'Prospecto': n1}
-                    df = pd.concat([df, pd.DataFrame([nuevo_registro])], ignore_index=True)
-                    self.sancionados = df[df.Puntos != 0]
-                else:
-                    pass
+            c = str(name.name)
+            ca = c.upper()
+            a = str(n1)
+            aa = a.upper()
+            listas = name.list
+            result = fuzz.partial_ratio(aa, ca)
+            if result >= puntos:
+                nuevo_registro = {'id': int(name.id), 'nombres': ca,
+                                  'Puntos': result, 'Base_de_Datos': listas,
+                                  'Prospecto': n1}
+                df = pd.concat([df, pd.DataFrame([nuevo_registro])], ignore_index=True)
+                self.sancionados = df[df.Puntos != 0]
+            else:
+                pass
         self.sancionados = df[df.Puntos != 0]
         return sancionados
 
