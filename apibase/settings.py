@@ -68,6 +68,7 @@ CORS_ORIGIN_WHITELIST = (
     'https://onboarding.universidadisep.com',
 'http://onboarding.universidadisep.com',
 'http://localhost:3000',
+    'https://lovable.dev/',
 )
 
 
