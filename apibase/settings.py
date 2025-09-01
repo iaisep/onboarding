@@ -62,14 +62,14 @@ MIDDLEWARE = [
 ]
 
 
-CORS_ORIGIN_WHITELIST = (
-
-    'https://localhost:3000',
-    'https://onboarding.universidadisep.com',
-'http://onboarding.universidadisep.com',
-'http://localhost:3000',
-    'https://lovable.dev',
-)
+CORS_ORIGIN_WHITELIST = True
+#(
+#    'https://localhost:3000',
+#    'https://onboarding.universidadisep.com',
+#'http://onboarding.universidadisep.com',
+#'http://localhost:3000',
+#    'https://lovable.dev',
+#)
 
 
 REST_FRAMEWORK ={
