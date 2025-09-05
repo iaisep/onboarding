@@ -93,22 +93,70 @@ Content-Type: application/json
 curl -X GET http://127.0.0.1:8000/health/
 ```
 
-### 2. OCR con archivo inexistente (test error handling)
+### 2. OCR Procesado (AWS Rekognition)
 ```bash
 curl -X POST http://127.0.0.1:8000/ocr/ \
   -H "Content-Type: application/json" \
   -d '{
-    "faceselfie": "archivo_que_no_existe.jpg",
-    "ocrident": "bucket-getapp-t"
+    "faceselfie": "imagen.jpg",
+    "ocrident": "documento.jpg"
   }'
 ```
 
-### 3. Lista restrictiva (funcionalidad básica)
+### 3. OCR Raw (Respuesta completa de AWS)
+```bash
+curl -X POST http://127.0.0.1:8000/ocr-raw/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "faceselfie": "imagen.jpg",
+    "ocrident": "documento.jpg"
+  }'
+```
+
+### 4. Subida de Archivos a S3
+```bash
+curl -X POST http://127.0.0.1:8000/upload/ \
+  -H "Content-Type: multipart/form-data" \
+  -F "file=@documento.pdf"
+```
+
+### 5. Comparación Facial
+```bash
+curl -X POST http://127.0.0.1:8000/face/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "faceselfie": "foto1.jpg",
+    "ocrident": "foto2.jpg"
+  }'
+```
+
+### 6. Lista restrictiva (funcionalidad básica)
 ```bash
 curl -X POST http://127.0.0.1:8000/lists/ \
   -H "Content-Type: application/json" \
   -d '{
     "string_income": "Juan Perez"
+  }'
+```
+
+### 7. Análisis de Documento de Identidad (Textract ID)
+```bash
+curl -X POST http://127.0.0.1:8000/textract-id/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "document_name": "cedula.jpg",
+    "analysis_type": "id_document",
+    "bucket_name": "onboarding-uisep"
+  }'
+```
+
+### 8. Análisis General de Documento (Textract General)
+```bash
+curl -X POST http://127.0.0.1:8000/textract-general/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "document_name": "contrato.pdf",
+    "bucket_name": "onboarding-uisep"
   }'
 ```
 

@@ -105,48 +105,18 @@ class consult45Raw:
             }
         
         try:
-            # Procesar imagen
-            logger.debug(f"Raw OCR opening image file: {photoviene}")
+            # Procesar imagen original sin modificaciones
+            logger.debug(f"Raw OCR opening original image file: {photoviene}")
             image = Image.open(photoviene)
             ancho = image.size
-            logger.debug(f"Raw OCR image dimensions: {ancho}")
+            logger.debug(f"Raw OCR original image dimensions: {ancho}")
             
-            image_binary = ''
-            _ancho = .50
-            _alto = .50
-            logger.debug(f"Raw OCR resizing image with factors: {_ancho}, {_alto}")
-            image.thumbnail((ancho[0] * _ancho, ancho[1] * _alto))
-            image.save(photoviene)
-            ancho = image.size
-            logger.debug(f"Raw OCR new image dimensions after resize: {ancho}")
+            # Usar la imagen original sin redimensionar ni rotar
+            logger.debug("Raw OCR using original image without processing")
+            with open(photoviene, 'rb') as image_file:
+                image_binary = image_file.read()
             
-            # Preparar imagen para AWS
-            if ancho[0] > ancho[1] and (ancho[0]-ancho[1] >= (ancho[1]/4)):
-                logger.debug("Raw OCR image is landscape, rotating -90 degrees")
-                image_rot_180 = image.rotate(-90)
-                image_rot_180.save(photoviene)
-                image = Image.open(open(photoviene, 'rb'))
-                stream = io.BytesIO()
-                image.save(stream, format=image.format)
-                image_binary = stream.getvalue()
-                logger.debug(f"Raw OCR uploading rotated image to S3: {photova}")
-                s3_client.upload_file(photoviene, bucket, photova)
-
-            elif ancho[0] < ancho[1]:
-                logger.debug("Raw OCR image is portrait, processing without rotation")
-                image = Image.open(open(photoviene, 'rb'))
-                stream = io.BytesIO()
-                image.save(stream, format=image.format)
-                image_binary = stream.getvalue()
-                logger.debug(f"Raw OCR uploading portrait image to S3: {photova}")
-                s3_client.upload_file(photoviene, bucket, photova)
-            else:
-                # Square or other dimensions
-                logger.debug("Raw OCR image dimensions don't meet rotation criteria, processing as-is")
-                image = Image.open(open(photoviene, 'rb'))
-                stream = io.BytesIO()
-                image.save(stream, format=image.format)
-                image_binary = stream.getvalue()
+            logger.info(f"Raw OCR using original image file: {photo} (no processing applied)")
                 
         except Exception as e:
             logger.error(f"Raw OCR error processing image {photoviene}: {str(e)}")
@@ -209,14 +179,14 @@ class consult45Raw:
                     'bucket': bucket,
                     'temp_files': {
                         'original': photoviene,
-                        'processed': photova
+                        'processed': None  # No se procesó la imagen
                     },
                     'image_dimensions': {
-                        'final': ancho,
-                        'resize_factors': {'width': _ancho, 'height': _alto}
+                        'original': ancho,
+                        'processing_applied': False
                     },
                     'text_detections_count': len(raw_response.get('TextDetections', [])),
-                    'processing_type': 'raw_response'
+                    'processing_type': 'raw_response_original_image'
                 }
             }
             
