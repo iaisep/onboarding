@@ -60,15 +60,16 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     'corsheaders.middleware.CorsMiddleware',
 ]
+CORS_ALLOW_ALL_ORIGINS = True
 
-
-CORS_ORIGIN_WHITELIST = (
-
-    'https://localhost:3000',
-    'https://onboarding.universidadisep.com',
-'http://onboarding.universidadisep.com',
-'http://localhost:3000',
-)
+#CORS_ORIGIN_WHITELIST = True
+#(
+#    'https://localhost:3000',
+#    'https://onboarding.universidadisep.com',
+#'http://onboarding.universidadisep.com',
+#'http://localhost:3000',
+#    'https://lovable.dev',
+#)
 
 
 REST_FRAMEWORK ={
