@@ -209,6 +209,120 @@ class consult45Raw:
                 }
             }
 
+    def detect_text_batch(self, file_list, bucket):
+        """
+        Procesa múltiples archivos de forma secuencial y combina los resultados
+        Útil para PDFs divididos en páginas
+        """
+        logger.info(f"Starting batch Raw OCR processing for {len(file_list)} files")
+        
+        from datetime import datetime
+        
+        batch_results = {
+            'success': True,
+            'files_processed': len(file_list),
+            'files_successful': 0,
+            'files_failed': 0,
+            'combined_response': {
+                'TextDetections': [],
+                'BatchMetadata': []
+            },
+            'individual_results': [],
+            'errors': [],
+            'metadata': {
+                'batch_id': datetime.now().isoformat(),
+                'processing_type': 'batch_raw_ocr',
+                'total_text_detections': 0,
+                'bucket': bucket,
+                'processed_files': []
+            }
+        }
+        
+        for index, filename in enumerate(file_list):
+            logger.info(f"Processing file {index + 1}/{len(file_list)}: {filename}")
+            
+            try:
+                # Procesar archivo individual
+                single_result = self.detect_text_raw(filename, bucket)
+                
+                if single_result['success']:
+                    # Agregar texto detectado al resultado combinado
+                    text_detections = single_result['raw_response'].get('TextDetections', [])
+                    
+                    # Agregar prefijo de página/archivo para identificar origen
+                    for detection in text_detections:
+                        detection['SourceFile'] = filename
+                        detection['PageNumber'] = index + 1
+                    
+                    batch_results['combined_response']['TextDetections'].extend(text_detections)
+                    batch_results['combined_response']['BatchMetadata'].append({
+                        'filename': filename,
+                        'page_number': index + 1,
+                        'text_count': len(text_detections),
+                        'success': True
+                    })
+                    
+                    batch_results['files_successful'] += 1
+                    batch_results['metadata']['processed_files'].append({
+                        'filename': filename,
+                        'page_number': index + 1,
+                        'status': 'success',
+                        'text_detections': len(text_detections)
+                    })
+                    
+                    logger.info(f"Successfully processed {filename}: {len(text_detections)} text detections")
+                    
+                else:
+                    batch_results['files_failed'] += 1
+                    error_info = {
+                        'filename': filename,
+                        'page_number': index + 1,
+                        'error': single_result['error'],
+                        'error_code': single_result['error_code']
+                    }
+                    batch_results['errors'].append(error_info)
+                    batch_results['metadata']['processed_files'].append({
+                        'filename': filename,
+                        'page_number': index + 1,
+                        'status': 'failed',
+                        'error': single_result['error']
+                    })
+                    
+                    logger.error(f"Failed to process {filename}: {single_result['error']}")
+                
+                # Agregar resultado individual (opcional, para debugging)
+                batch_results['individual_results'].append({
+                    'filename': filename,
+                    'page_number': index + 1,
+                    'result': single_result
+                })
+                
+            except Exception as e:
+                batch_results['files_failed'] += 1
+                error_info = {
+                    'filename': filename,
+                    'page_number': index + 1,
+                    'error': str(e),
+                    'error_code': '500_Processing_Error'
+                }
+                batch_results['errors'].append(error_info)
+                batch_results['metadata']['processed_files'].append({
+                    'filename': filename,
+                    'page_number': index + 1,
+                    'status': 'exception',
+                    'error': str(e)
+                })
+                
+                logger.error(f"Exception processing {filename}: {str(e)}")
+        
+        # Actualizar metadata final
+        batch_results['metadata']['total_text_detections'] = len(batch_results['combined_response']['TextDetections'])
+        batch_results['success'] = batch_results['files_failed'] == 0
+        
+        logger.info(f"Batch processing completed: {batch_results['files_successful']} successful, {batch_results['files_failed']} failed")
+        
+        return batch_results
+
     def get_processing_info(self):
         """
         Devuelve información sobre la configuración actual del procesador

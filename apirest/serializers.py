@@ -118,3 +118,65 @@ class TextractAnalysisSerializer(serializers.Serializer):
         return value
 
 
+class BatchOCRSerializer(serializers.Serializer):
+    """
+    Serializer para procesamiento batch de OCR Raw
+    Procesa múltiples archivos de forma secuencial
+    """
+    file_list = serializers.ListField(
+        child=serializers.CharField(max_length=255),
+        min_length=1,
+        max_length=50,  # Máximo 50 archivos por batch
+        help_text="Lista de nombres de archivos a procesar (ej: ['archivo1.jpg', 'archivo2.jpg'])",
+        required=True
+    )
+    
+    bucket_name = serializers.CharField(
+        max_length=255,
+        help_text="Nombre del bucket S3 (opcional, usa el bucket por defecto si no se especifica)",
+        required=False,
+        allow_blank=True
+    )
+    
+    def validate_file_list(self, value):
+        """
+        Validar que todos los archivos tengan extensiones válidas para OCR
+        """
+        valid_extensions = ['.jpg', '.jpeg', '.png', '.pdf', '.tiff', '.bmp']
+        
+        for filename in value:
+            if not filename:
+                raise serializers.ValidationError("Los nombres de archivo no pueden estar vacíos")
+            
+            # Obtener extensión del archivo
+            try:
+                file_extension = f".{filename.lower().split('.')[-1]}"
+            except:
+                raise serializers.ValidationError(f"Nombre de archivo inválido: '{filename}'")
+            
+            if file_extension not in valid_extensions:
+                raise serializers.ValidationError(
+                    f"Archivo '{filename}' no tiene una extensión válida para OCR. "
+                    f"Extensiones permitidas: {', '.join(valid_extensions)}"
+                )
+        
+        return value
+    
+    def validate(self, data):
+        """
+        Validaciones adicionales a nivel del serializer completo
+        """
+        file_list = data.get('file_list', [])
+        
+        # Verificar que no haya archivos duplicados
+        if len(file_list) != len(set(file_list)):
+            raise serializers.ValidationError("La lista contiene archivos duplicados")
+        
+        # Validar longitud razonable de nombres de archivo
+        for filename in file_list:
+            if len(filename) > 255:
+                raise serializers.ValidationError(f"Nombre de archivo muy largo: '{filename[:50]}...'")
+        
+        return data
+
+

@@ -2,7 +2,7 @@ from __future__ import unicode_literals
 from rest_framework import generics
 from rest_framework import status
 from rest_framework.response import Response
-from apirest.serializers import llegaSerializer2, llegafaceSerializer2, FileUploadSerializer, TextractAnalysisSerializer
+from apirest.serializers import llegaSerializer2, llegafaceSerializer2, FileUploadSerializer, TextractAnalysisSerializer, BatchOCRSerializer
 from django.http import HttpResponse
 from .codeorm import consult2
 from .AWSocr import consult45
@@ -527,4 +527,109 @@ class TextractGeneralAnalysisView(generics.CreateAPIView):
                 'validation_errors': serializer.errors,
                 'text_blocks': [],
                 'full_text': ''
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class BatchOCRRawView(generics.CreateAPIView):
+    """
+    Endpoint para procesamiento batch de OCR Raw
+    Procesa múltiples archivos de forma secuencial y devuelve resultado combinado
+    Ideal para PDFs divididos en páginas o lotes de imágenes
+    """
+    serializer_class = BatchOCRSerializer
+    #permission_classes = [IsAuthenticated]
+    
+    def post(self, request, format=None):
+        logger.info("Batch Raw OCR endpoint accessed")
+        logger.debug(f"Batch request data: {request.data}")
+        
+        serializer = BatchOCRSerializer(data=request.data)
+        if serializer.is_valid():
+            logger.debug("Batch OCR serializer validation successful")
+            
+            try:
+                # Get validated data
+                file_list = serializer.validated_data['file_list']
+                bucket_name = serializer.validated_data.get('bucket_name', None)
+                
+                # Use default bucket if not specified
+                if not bucket_name:
+                    bucket_name = config('AWS_S3_BUCKET', default='onboarding-uisep')
+                
+                logger.info(f"Processing batch OCR for {len(file_list)} files in bucket: {bucket_name}")
+                logger.debug(f"Files to process: {file_list}")
+                
+                # Initialize batch processor
+                logger.debug("Initializing consult45Raw for batch processing")
+                processor = consult45Raw()
+                
+                # Process files in batch
+                logger.info("Starting batch OCR processing")
+                result = processor.detect_text_batch(file_list, bucket_name)
+                
+                logger.info(f"Batch OCR completed - Success: {result['success']}, "
+                          f"Processed: {result['files_processed']}, "
+                          f"Successful: {result['files_successful']}, "
+                          f"Failed: {result['files_failed']}")
+                
+                # Determine response status based on results
+                if result['success']:
+                    # All files processed successfully
+                    logger.info("All files processed successfully")
+                    return Response(result, status=status.HTTP_200_OK)
+                elif result['files_successful'] > 0:
+                    # Some files processed successfully, some failed
+                    logger.warning(f"Partial success: {result['files_failed']} files failed")
+                    return Response(result, status=status.HTTP_207_MULTI_STATUS)
+                else:
+                    # All files failed
+                    logger.error("All files failed to process")
+                    return Response(result, status=status.HTTP_400_BAD_REQUEST)
+                
+            except Exception as e:
+                logger.error(f"Unexpected error in Batch OCR endpoint: {str(e)}")
+                logger.error(f"Exception type: {type(e).__name__}")
+                
+                error_response = {
+                    'success': False,
+                    'files_processed': 0,
+                    'files_successful': 0,
+                    'files_failed': len(serializer.validated_data.get('file_list', [])),
+                    'error': f'Unexpected batch processing error: {str(e)}',
+                    'error_code': '500_Batch_OCR_Unexpected_Error',
+                    'combined_response': {
+                        'TextDetections': [],
+                        'BatchMetadata': []
+                    },
+                    'errors': [{
+                        'error': str(e),
+                        'error_code': '500_Batch_OCR_Unexpected_Error',
+                        'exception_type': type(e).__name__
+                    }],
+                    'metadata': {
+                        'processing_type': 'batch_raw_ocr',
+                        'total_text_detections': 0,
+                        'bucket': bucket_name if 'bucket_name' in locals() else 'unknown'
+                    }
+                }
+                return Response(error_response, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        else:
+            logger.warning(f"Batch OCR serializer validation failed: {serializer.errors}")
+            return Response({
+                'success': False,
+                'files_processed': 0,
+                'files_successful': 0,
+                'files_failed': 0,
+                'error': 'Invalid request data for batch OCR processing',
+                'error_code': '400_Batch_OCR_Validation_Error',
+                'validation_errors': serializer.errors,
+                'combined_response': {
+                    'TextDetections': [],
+                    'BatchMetadata': []
+                },
+                'errors': [],
+                'metadata': {
+                    'processing_type': 'batch_raw_ocr',
+                    'total_text_detections': 0
+                }
             }, status=status.HTTP_400_BAD_REQUEST)
