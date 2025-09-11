@@ -1,7 +1,5 @@
 import boto3
 import pandas as pd
-from PIL import Image
-import io
 from decouple import config
 from apirest.models import puntaje_face
 import logging
@@ -31,7 +29,7 @@ class consult46:
             raise
 
     def compare_faces(self, sourceFile, targetFile):
-        logger.info(f"Starting face comparison - Source: {sourceFile}, Target: {targetFile}")
+        logger.info(f"Starting optimized face comparison - Source: {sourceFile}, Target: {targetFile}")
         
         try:
             # Get AWS credentials from environment variables
@@ -39,43 +37,106 @@ class consult46:
             aws_access_key_id = config('AWS_REKOGNITION_ACCESS_KEY_ID')
             aws_secret_access_key = config('AWS_REKOGNITION_SECRET_ACCESS_KEY')
             region_name = config('AWS_DEFAULT_REGION', default='us-east-1')
-            bucket = config('AWS_S3_FACE_BUCKET')
+            bucket = config('AWS_S3_FACE_BUCKET', default=config('AWS_S3_BUCKET'))
             
             logger.debug(f"Configuring Rekognition client for region: {region_name}, bucket: {bucket}")
             
+            # Initialize Rekognition client
             client = boto3.client('rekognition',
                                   aws_access_key_id=aws_access_key_id,
                                   aws_secret_access_key=aws_secret_access_key,
                                   region_name=region_name)
-            Bucket = bucket
-
-            # ---------Comentar en  produccion
-
+            
+            # Initialize response dataframe
             indices = [0]
-            comparar = {'cod': "400_Bad Quality_image", 'coincidencia': "No Match"}
+            comparar = {'cod': "400_Bad_Quality_image", 'coincidencia': "No Match"}
             
             logger.debug("Fetching face comparison threshold from database")
             puntos = int(puntaje_face.objects.get(pk=1).puntaje_Max)
             logger.debug(f"Face comparison threshold: {puntos}")
             
             df = pd.DataFrame(data=comparar, index=indices)
-            # self.comparar = df
-            error = ""
+            error = False
 
-            xsourceFile = 'y' + sourceFile
-            logger.debug(f"Downloading source file from S3: {bucket}/{sourceFile} to {xsourceFile}")
+            # OPTIMIZACIÓN: Usar imágenes directamente del bucket S3 sin descargar
+            logger.info("Processing images directly from S3 bucket (no local downloads)")
             
-            s3_client = boto3.client('s3')
-            s3_client.download_file(Bucket, sourceFile, xsourceFile)
-            logger.debug(f"Successfully downloaded source file")
+            # 1. Detectar equipos de protección (mascarillas) usando S3Object
+            logger.debug(f"Checking for face masks in source image: {sourceFile}")
+            response2 = client.detect_protective_equipment(
+                Image={"S3Object": {"Bucket": bucket, "Name": sourceFile}},
+                SummarizationAttributes={
+                    'MinConfidence': 80,
+                    'RequiredEquipmentTypes': ['FACE_COVER']
+                }
+            )
+
+            # Verificar si hay mascarillas
+            for person in response2['Persons']:
+                for body_part in person['BodyParts']:
+                    ppe_items = body_part['EquipmentDetections']
+                    for ppe_item in ppe_items:
+                        if ppe_item['Type'] == 'FACE_COVER' and ppe_item['CoversBodyPart']['Value'] is True:
+                            logger.warning(f"Face mask detected in {sourceFile}")
+                            error = True
+                            comparar = {'cod': "400_Bad_Quality_image", 'coincidencia': "Mascarillas"}
+                            df = df[(df['coincidencia'] != 'No Match')]
+                            df = pd.concat([df, pd.DataFrame([comparar])], ignore_index=True)
+                            break
+
+            # 2. Detectar accesorios faciales (lentes) usando S3Object
+            logger.debug(f"Checking for eyewear in source image: {sourceFile}")
+            response3 = client.detect_faces(
+                Image={"S3Object": {"Bucket": bucket, "Name": sourceFile}},
+                Attributes=['ALL']
+            )
             
-            image = Image.open(xsourceFile)
-            ancho = image.size
-            logger.debug(f"Source image dimensions: {ancho}")
+            for faceDetail in response3['FaceDetails']:
+                if faceDetail['Eyeglasses']['Value'] is True or faceDetail['Sunglasses']['Value'] is True:
+                    logger.warning(f"Eyewear detected in {sourceFile}")
+                    error = True
+                    comparar = {'cod': "400_Bad_Quality_image", 'coincidencia': "Lentes"}
+                    df = df[(df['coincidencia'] != 'No Match')]
+                    df = pd.concat([df, pd.DataFrame([comparar])], ignore_index=True)
+                    break
+
+            # 3. Si no hay errores, realizar comparación facial usando S3Objects
+            if not error:
+                logger.info(f"Performing face comparison between {sourceFile} and {targetFile}")
+                response = client.compare_faces(
+                    SimilarityThreshold=80,
+                    SourceImage={"S3Object": {"Bucket": bucket, "Name": sourceFile}},
+                    TargetImage={"S3Object": {"Bucket": bucket, "Name": targetFile}}
+                )
+
+                # Procesar resultados de comparación
+                matches_found = False
+                for faceMatch in response['FaceMatches']:
+                    similarity = faceMatch['Similarity']
+                    logger.debug(f"Face match found with {similarity}% similarity")
+                    
+                    if int(similarity) >= puntos:
+                        logger.info(f"Face match above threshold: {similarity}% >= {puntos}%")
+                        nuevo_registro = {'cod': "200_OK", 'coincidencia': f"{similarity:.2f}% confidence"}
+                        df = pd.concat([df, pd.DataFrame([nuevo_registro])], ignore_index=True)
+                        df = df[(df['coincidencia'] != 'No Match')]
+                        matches_found = True
+                        break
+
+                if not matches_found:
+                    logger.info("No face matches found above threshold")
+                    # Mantener el resultado "No Match" original
             
+            # Limpiar DataFrame final
+            self.comparar = df
+            logger.info(f"Face comparison completed - Final result: {df.iloc[-1]['coincidencia'] if not df.empty else 'No results'}")
+            
+            return comparar
+
         except Exception as e:
-            logger.error(f"Error setting up face comparison: {str(e)}")
+            logger.error(f"Error in optimized face comparison: {str(e)}")
             logger.error(f"Exception type: {type(e).__name__}")
+            
             # Return error response
             error_response = {
                 'cod': '500_AWS_Error',
@@ -85,64 +146,4 @@ class consult46:
             df_error = pd.DataFrame([error_response], index=indices)
             self.comparar = df_error
             return error_response
-        _ancho = .70
-        _alto = .70
-        image.thumbnail((ancho[0] * _ancho, ancho[1] * _alto))
-        image.save(xsourceFile)
-        if ancho[0] > ancho[1]:
-            image = image.rotate(90)
-            image.save(xsourceFile)
-        image = Image.open(open(xsourceFile, 'rb'))
-        stream = io.BytesIO()
-        image.save(stream, format=image.format)
-        image_binary = stream.getvalue()
-
-        client = boto3.client('rekognition')
-        response2 = client.detect_protective_equipment(Image={'Bytes': image_binary},
-                                                       SummarizationAttributes={'MinConfidence': 80,
-                                                                                'RequiredEquipmentTypes': ['FACE_COVER',
-                                                                                                           ]})
-
-        for person in response2['Persons']:
-            found_mask = False
-            for body_part in person['BodyParts']:
-                ppe_items = body_part['EquipmentDetections']
-
-                for ppe_item in ppe_items:
-                    # found a mask
-                    if ppe_item['Type'] == 'FACE_COVER' and ppe_item['CoversBodyPart']['Value'] is True:
-                        found_mask = True
-                        error = True
-                        comparar = {'cod': "400_Bad Quality_image", 'coincidencia': "Mascarillas"}
-                        df = df[(df['coincidencia'] != 'No Match')]
-                        df = df.append(comparar, ignore_index=True)
-                        # df = df[(df['coincidencia'] != 'No Match')]
-        response3 = client.detect_faces(Image={"S3Object": {"Bucket": Bucket, "Name": sourceFile, }},
-                                        Attributes=['ALL'])
-        for faceDetail in response3['FaceDetails']:
-            if faceDetail['Eyeglasses']['Value'] is True or faceDetail['Sunglasses']['Value'] is True:
-                error = True
-                comparar = {'cod': "400_Bad Quality_image", 'coincidencia': "Lentes"}
-                df = df[(df['coincidencia'] != 'No Match')]
-                df = df.append(comparar, ignore_index=True)
-                # df = df[(df['coincidencia'] != 'No Match')]
-        if not error:
-
-            response = client.compare_faces(SimilarityThreshold=80,
-                                            SourceImage={"S3Object": {"Bucket": Bucket, "Name": sourceFile, }},
-                                            TargetImage={"S3Object": {"Bucket": Bucket, "Name": targetFile, }})
-
-            for faceMatch in response['FaceMatches']:
-                if int(faceMatch['Similarity']) >= puntos:
-                    similarity = str(faceMatch['Similarity'])
-                    nuevo_registro = {'cod': "200_OK", 'coincidencia': similarity + '% confidence'}
-                    df = df.append(nuevo_registro, ignore_index=True)
-                    df = df[(df['coincidencia'] != 'No Match')]
-                # else:
-                # nuevo_registro = {'cod': "400_Bad Quality_image", 'coincidencia': "No Match"}
-                # df = df.append(nuevo_registro, ignore_index=True)
-                # df = df[(df['coincidencia'] != 'No Match')]
-
-        self.comparar = df
-        return comparar
 
