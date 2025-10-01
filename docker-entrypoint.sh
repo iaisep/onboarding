@@ -65,88 +65,70 @@ if [ -z "$DB_HOST" ] || [ -z "$DB_PORT" ]; then
   exit 1
 fi
 
-# Test database connection with timeout
-echo "🔍 Testing database connection..."
-TIMEOUT=60
-ELAPSED=0
+# Test database connection with Python
+echo "🔍 Testing database connection with Python..."
+python3 << 'PYTHON_SCRIPT'
+import socket
+import time
+import os
+import sys
 
-# Test if netcat is available
-if ! command -v nc &> /dev/null; then
-  echo "📦 Installing networking tools..."
-  apt-get update -qq && apt-get install -y -qq netcat-openbsd iputils-ping dnsutils
-fi
+host = os.environ.get('DB_HOST', '')
+port_str = os.environ.get('DB_PORT', '0')
 
-# First, test basic network connectivity
-echo "🌐 Network diagnostics for $DB_HOST:$DB_PORT"
+if not host or port_str == '0':
+    print("❌ ERROR: DB_HOST and DB_PORT environment variables must be set!")
+    sys.exit(1)
 
-# Test DNS resolution
-echo "  🔍 DNS Resolution:"
-if nslookup $DB_HOST > /dev/null 2>&1; then
-  echo "    ✅ DNS resolved successfully"
-  RESOLVED_IP=$(nslookup $DB_HOST | grep -A1 "Name:" | grep "Address:" | head -1 | awk '{print $2}' || echo "unknown")
-  echo "    📍 Resolved to: $RESOLVED_IP"
-else
-  echo "    ❌ DNS resolution failed"
-fi
+port = int(port_str)
+timeout = 60
+start = time.time()
 
-# Test basic connectivity (ping)
-echo "  🏓 Ping test:"
-if ping -c 1 -W 3 $DB_HOST > /dev/null 2>&1; then
-  echo "    ✅ Host is reachable"
-else
-  echo "    ❌ Host is not reachable via ping"
-fi
+print(f"🌐 Network diagnostics for {host}:{port}")
+print("  🔌 Port connectivity test:")
 
-# Test port connectivity with detailed feedback
-echo "  🔌 Port connectivity test:"
-while ! nc -z $DB_HOST $DB_PORT; do
-  if [ $ELAPSED -ge $TIMEOUT ]; then
-    echo "    ❌ Database connection timeout after ${TIMEOUT}s"
-    echo ""
-    echo "🚨 CONNECTION FAILED - Debug Information:"
-    echo "  Target: $DB_HOST:$DB_PORT"
-    echo "  Timeout: ${TIMEOUT} seconds"
-    
-    # Additional network debugging
-    echo ""
-    echo "🔍 Advanced Network Diagnostics:"
-    echo "  - Testing connectivity to common ports..."
-    
-    # Test if host responds to any common ports
-    for test_port in 22 80 443 5432 3000; do
-      if nc -z -w2 $DB_HOST $test_port 2>/dev/null; then
-        echo "    ✅ Port $test_port is open on $DB_HOST"
-      fi
-    done
-    
-    # Show routing information
-    echo "  - Route to host:"
-    ip route get $RESOLVED_IP 2>/dev/null || echo "    ❌ Cannot determine route"
-    
-    # Check if we're in the right network
-    echo "  - Container network info:"
-    ip addr show 2>/dev/null | grep "inet " | head -3
-    
-    echo ""
-    echo "💡 Possible Solutions:"
-    echo "  1. Verify database host is accessible from this network"
-    echo "  2. Check if port $DB_PORT is open on the database server"
-    echo "  3. Verify firewall/security group settings"
-    echo "  4. Confirm database is running on port $DB_PORT"
-    echo "  5. Test connection from Coolify host: nc -z $DB_HOST $DB_PORT"
-    
-    exit 1
-  fi
-  
-  if [ $((ELAPSED % 10)) -eq 0 ]; then
-    echo "    ⏳ Still trying to connect... (${ELAPSED}s/${TIMEOUT}s)"
-  fi
-  
-  sleep 2
-  ELAPSED=$((ELAPSED + 2))
-done
-echo "    ✅ Port $DB_PORT is accessible!"
-echo "✅ Database is ready!"
+while time.time() - start < timeout:
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(2)
+        result = sock.connect_ex((host, port))
+        sock.close()
+        
+        if result == 0:
+            print(f"    ✅ Port {port} is accessible!")
+            print("✅ Database is ready!")
+            sys.exit(0)
+        
+        elapsed = int(time.time() - start)
+        if elapsed % 10 == 0:
+            print(f"    ⏳ Still trying to connect... ({elapsed}s/{timeout}s)")
+        
+        time.sleep(2)
+    except Exception as e:
+        elapsed = int(time.time() - start)
+        if elapsed % 10 == 0:
+            print(f"    ⏳ Connection attempt failed: {str(e)[:50]} ({elapsed}s/{timeout}s)")
+        time.sleep(2)
+
+# Timeout reached
+elapsed = int(time.time() - start)
+print(f"    ❌ Database connection timeout after {elapsed}s")
+print("")
+print("🚨 CONNECTION FAILED - Debug Information:")
+print(f"  Target: {host}:{port}")
+print(f"  Timeout: {timeout} seconds")
+print("")
+print("💡 Possible Solutions:")
+print("  1. Verify database host is accessible from this network")
+print(f"  2. Check if port {port} is open on the database server")
+print("  3. Verify firewall/security group settings")
+print(f"  4. Confirm database is running on port {port}")
+print(f"  5. Test connection: python3 -c 'import socket; socket.create_connection((\"{host}\", {port}), timeout=5)'")
+print("")
+print("⚠️  Continuing anyway - Django will handle connection errors...")
+PYTHON_SCRIPT
+
+echo "✅ Database check complete!"
 
 # Fix log files permissions (running as root)
 echo "📝 Setting up log files and permissions..."

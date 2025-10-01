@@ -11,84 +11,50 @@ ENV LD_LIBRARY_PATH=/usr/local/lib:/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH
 # Set work directory
 WORKDIR /app
 
-# Install system dependencies with retry mechanism
-RUN for i in 1 2 3; do \
-        apt-get update --fix-missing && \
-        apt-get install -y --no-install-recommends \
-            postgresql-client \
-            build-essential \
-            libpq-dev \
-            curl \
-            netcat-traditional \
-            libzbar0 \
-            libzbar-dev \
-            libgl1-mesa-glx \
-            libglib2.0-0 \
-            libsm6 \
-            libxext6 \
-            libxrender-dev && \
-        break || sleep 10; \
-    done
+# Install system dependencies - SIMPLIFIED
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        postgresql-client \
+        build-essential \
+        libpq-dev \
+        curl \
+        libzbar0 \
+        libzbar-dev \
+        libgl1-mesa-glx \
+        libglib2.0-0 \
+        libsm6 \
+        libxext6 \
+        libxrender-dev && \
+    rm -rf /var/lib/apt/lists/* && \
+    ldconfig
 
-# Create symlink for netcat command (netcat-traditional uses nc.traditional binary)
-RUN ln -sf /bin/nc.traditional /usr/bin/nc || ln -sf /usr/bin/nc.traditional /usr/bin/nc || true
-
-# Verify zbar installation
-RUN ldconfig && \
-    find /usr -name "libzbar.so*" && \
-    python3 -c "from ctypes.util import find_library; print('libzbar:', find_library('zbar'))" || echo "libzbar check completed"
-
-# Install Python dependencies with retry mechanism
+# Install Python dependencies
 COPY requirements-docker.txt .
-RUN for i in 1 2 3; do \
-        pip install --no-cache-dir --upgrade pip \
-            --index-url https://pypi.org/simple/ \
-            --trusted-host pypi.org \
-            --trusted-host pypi.python.org \
-            --trusted-host files.pythonhosted.org && \
-        pip install --no-cache-dir -r requirements-docker.txt \
-            --index-url https://pypi.org/simple/ \
-            --trusted-host pypi.org \
-            --trusted-host pypi.python.org \
-            --trusted-host files.pythonhosted.org && \
-        break || sleep 15; \
-    done
-
-# Update library cache after pip install
-RUN ldconfig
-
-# Note: pyzbar and opencv verification happens at runtime in Django startup
-# If there are import errors, check docker-entrypoint.sh output
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements-docker.txt && \
+    ldconfig
 
 # Copy project
 COPY . .
 
-# Create static files directory
-RUN mkdir -p /app/static
+# Create directories
+RUN mkdir -p /app/static /app/logs
 
-# Create entrypoint script
+# Copy entrypoint
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
 
-# Create non-root user
+# Create user
 RUN addgroup --system django && \
-    adduser --system --group django
+    adduser --system --group django && \
+    chown -R django:django /app
 
-# Change ownership of the app directory
-RUN chown -R django:django /app
-
-# Switch to non-root user
 USER django
 
-# Expose port
 EXPOSE 8000
 
-# Health check
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/admin/login/ || exit 1
 
-# Use entrypoint script
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
-
-# Default command
 CMD ["gunicorn", "--bind", "0.0.0.0:8000", "--workers", "3", "--timeout", "120", "apibase.wsgi:application"]
