@@ -1,5 +1,11 @@
-# Use Python 3.12 slim image
+# Dockerfile específico para Coolify con soluciones DNS
+# Updated: 2025-10-01 - Added QR code dependencies (libzbar, pyzbar, opencv)
 FROM python:3.12-slim
+
+# Fix DNS issues in Coolify environment
+RUN echo "nameserver 8.8.8.8" > /etc/resolv.conf && \
+    echo "nameserver 8.8.4.4" >> /etc/resolv.conf && \
+    echo "nameserver 1.1.1.1" >> /etc/resolv.conf
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -9,46 +15,81 @@ ENV DEBIAN_FRONTEND=noninteractive
 # Set work directory
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends \
-        postgresql-client \
-        build-essential \
-        libpq-dev \
-        curl \
-        netcat-traditional \
-    && rm -rf /var/lib/apt/lists/*
+# Install system dependencies with retry mechanism
+RUN for i in 1 2 3; do \
+        apt-get update --fix-missing && \
+        apt-get install -y --no-install-recommends \
+            postgresql-client \
+            build-essential \
+            libpq-dev \
+            curl \
+            netcat-traditional \
+            dnsutils \
+            iputils-ping \
+            libzbar0 \
+            libzbar-dev \
+            libgl1-mesa-glx \
+            libglib2.0-0 \
+            libsm6 \
+            libxext6 \
+            libxrender-dev && \
+        break || sleep 10; \
+    done
 
-# Install Python dependencies
+# Verify zbar installation
+RUN ldconfig && \
+    find /usr -name "libzbar.so*" && \
+    python3 -c "from ctypes.util import find_library; print('libzbar:', find_library('zbar'))" || echo "libzbar check completed"
+
+# Test DNS resolution
+RUN nslookup pypi.org || echo "DNS test failed but continuing..."
+
+# Install Python dependencies with retry mechanism
 COPY requirements-docker.txt .
-RUN pip install --no-cache-dir --upgrade pip \
-    && pip install --no-cache-dir -r requirements-docker.txt
+RUN for i in 1 2 3; do \
+        pip install --no-cache-dir --upgrade pip \
+            --index-url https://pypi.org/simple/ \
+            --trusted-host pypi.org \
+            --trusted-host pypi.python.org \
+            --trusted-host files.pythonhosted.org && \
+        pip install --no-cache-dir -r requirements-docker.txt \
+            --index-url https://pypi.org/simple/ \
+            --trusted-host pypi.org \
+            --trusted-host pypi.python.org \
+            --trusted-host files.pythonhosted.org && \
+        break || sleep 15; \
+    done
+
+# Verify pyzbar installation
+RUN python3 -c "from pyzbar import pyzbar; print('✅ pyzbar loaded successfully')" && \
+    python3 -c "import cv2; print('✅ opencv loaded successfully, version:', cv2.__version__)"
 
 # Copy project
 COPY . .
 
-# Create non-root user first with proper shell and home directory
-RUN addgroup --system django \
-    && adduser --system --group --home /home/django --shell /bin/bash django
+# Create static files directory
+RUN mkdir -p /app/static
 
-# Create directories and set proper permissions
-RUN mkdir -p /app/static /app/logs \
-    && chmod 755 /app/static /app/logs \
-    && chown -R django:django /app
-
-# Create entrypoint script with executable permissions  
+# Create entrypoint script
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
 
-# Don't switch to non-root user yet - let entrypoint handle permissions
-# USER django
+# Create non-root user
+RUN addgroup --system django && \
+    adduser --system --group django
+
+# Change ownership of the app directory
+RUN chown -R django:django /app
+
+# Switch to non-root user
+USER django
 
 # Expose port
 EXPOSE 8000
 
-# Simple health check without admin dependency
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:8000/ || exit 1
+# Health check with DNS test
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/admin/login/ || exit 1
 
 # Use entrypoint script
 ENTRYPOINT ["/app/docker-entrypoint.sh"]

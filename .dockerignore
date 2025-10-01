@@ -63,9 +63,8 @@ docs/
 *.md
 
 # Docker
-Dockerfile*
+# Dockerfile* - REMOVED: Coolify needs to see Dockerfile.coolify
 docker-compose*.yml
-.dockerignore
 
 # Temporary files
 temp/
