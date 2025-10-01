@@ -1,11 +1,6 @@
-# Dockerfile específico para Coolify con soluciones DNS
+# Dockerfile para Coolify - Optimizado con QR Code Support
 # Updated: 2025-10-01 - Added QR code dependencies (libzbar, pyzbar, opencv)
 FROM python:3.12-slim
-
-# Fix DNS issues in Coolify environment
-RUN echo "nameserver 8.8.8.8" > /etc/resolv.conf && \
-    echo "nameserver 8.8.4.4" >> /etc/resolv.conf && \
-    echo "nameserver 1.1.1.1" >> /etc/resolv.conf
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -24,8 +19,6 @@ RUN for i in 1 2 3; do \
             libpq-dev \
             curl \
             netcat-traditional \
-            dnsutils \
-            iputils-ping \
             libzbar0 \
             libzbar-dev \
             libgl1-mesa-glx \
@@ -40,9 +33,6 @@ RUN for i in 1 2 3; do \
 RUN ldconfig && \
     find /usr -name "libzbar.so*" && \
     python3 -c "from ctypes.util import find_library; print('libzbar:', find_library('zbar'))" || echo "libzbar check completed"
-
-# Test DNS resolution
-RUN nslookup pypi.org || echo "DNS test failed but continuing..."
 
 # Install Python dependencies with retry mechanism
 COPY requirements-docker.txt .
@@ -87,7 +77,7 @@ USER django
 # Expose port
 EXPOSE 8000
 
-# Health check with DNS test
+# Health check
 HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/admin/login/ || exit 1
 
