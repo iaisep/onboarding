@@ -24,7 +24,11 @@ RUN for i in 1 2 3; do \
             curl \
             netcat-traditional \
             dnsutils \
-            iputils-ping && \
+            iputils-ping \
+            libzbar0 \
+            libzbar-dev \
+            libgl1-mesa-glx \
+            libglib2.0-0 && \
         break || sleep 10; \
     done && \
     rm -rf /var/lib/apt/lists/*
