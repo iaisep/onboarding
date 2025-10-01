@@ -30,14 +30,28 @@ RUN set -ex && \
         break || \
         { echo "Retry $i failed"; sleep 5; }; \
     done && \
-    rm -rf /var/lib/apt/lists/* && \
-    ldconfig
+    rm -rf /var/lib/apt/lists/*
+
+# Configure libzbar for pyzbar
+RUN ldconfig && \
+    echo "Verifying libzbar installation..." && \
+    find /usr -name "libzbar.so*" && \
+    ls -la /usr/lib/x86_64-linux-gnu/libzbar.so* || true && \
+    ldconfig -p | grep zbar || true
 
 # Install Python dependencies
 COPY requirements-docker.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements-docker.txt && \
-    ldconfig
+    pip install --no-cache-dir -r requirements-docker.txt
+
+# Verify pyzbar can find libzbar
+RUN python3 -c "import pyzbar; print('✅ pyzbar imported successfully')" || \
+    { echo "❌ pyzbar import failed - debugging..."; \
+      echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH"; \
+      ldconfig -p | grep zbar; \
+      find /usr -name "libzbar.so*"; \
+      python3 -c "from pyzbar import pyzbar" 2>&1 || true; \
+      exit 1; }
 
 # Copy project
 COPY . .
