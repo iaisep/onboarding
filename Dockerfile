@@ -28,7 +28,8 @@ RUN for i in 1 2 3; do \
             libxext6 \
             libxrender-dev && \
         break || sleep 10; \
-    done
+    done && \
+    ln -sf /bin/nc.traditional /usr/bin/nc
 
 # Verify zbar installation
 RUN ldconfig && \
