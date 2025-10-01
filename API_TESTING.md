@@ -160,6 +160,30 @@ curl -X POST http://127.0.0.1:8000/textract-general/ \
   }'
 ```
 
+### 9. Lectura de Código QR Individual
+```bash
+curl -X POST http://127.0.0.1:8000/qr-read/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "filename": "documento_qr.jpg",
+    "bucket_name": "onboarding-uisep"
+  }'
+```
+
+### 10. Lectura Batch de Códigos QR
+```bash
+curl -X POST http://127.0.0.1:8000/qr-batch/ \
+  -H "Content-Type: application/json" \
+  -d '{
+    "file_list": [
+      "documento_qr_1.jpg",
+      "documento_qr_2.jpg",
+      "documento_qr_3.jpg"
+    ],
+    "bucket_name": "onboarding-uisep"
+  }'
+```
+
 ## 🔧 **Debugging**
 
 ### Ver logs del servidor:

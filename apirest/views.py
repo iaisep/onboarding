@@ -2,7 +2,7 @@ from __future__ import unicode_literals
 from rest_framework import generics
 from rest_framework import status
 from rest_framework.response import Response
-from apirest.serializers import llegaSerializer2, llegafaceSerializer2, FileUploadSerializer, TextractAnalysisSerializer, BatchOCRSerializer
+from apirest.serializers import llegaSerializer2, llegafaceSerializer2, FileUploadSerializer, TextractAnalysisSerializer, BatchOCRSerializer, QRCodeSerializer, QRCodeBatchSerializer
 from django.http import HttpResponse
 from .codeorm import consult2
 from .AWSocr import consult45
@@ -10,6 +10,7 @@ from .AWSocrRaw import consult45Raw
 from .AWScompare import consult46
 from .AWSUpload import FileUploadS3
 from .AWSTextract import TextractIDAnalyzer
+from .AWSQRReader import QRCodeReader
 from rest_framework import status
 from django.contrib.auth.models import User
 from django.contrib.auth.hashers import check_password
@@ -632,4 +633,170 @@ class BatchOCRRawView(generics.CreateAPIView):
                     'processing_type': 'batch_raw_ocr',
                     'total_text_detections': 0
                 }
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class QRCodeReaderView(generics.CreateAPIView):
+    """
+    Endpoint para leer códigos QR de imágenes en S3
+    Lee códigos QR y devuelve los datos decodificados en JSON
+    """
+    serializer_class = QRCodeSerializer
+    #permission_classes = [IsAuthenticated]
+    
+    def post(self, request, format=None):
+        logger.info("QR Code Reader endpoint accessed")
+        logger.debug(f"QR request data: {request.data}")
+        
+        serializer = QRCodeSerializer(data=request.data)
+        if serializer.is_valid():
+            logger.debug("QR Code serializer validation successful")
+            
+            try:
+                # Get validated data
+                filename = serializer.validated_data['filename']
+                bucket_name = serializer.validated_data.get('bucket_name', None)
+                
+                # Use default bucket if not specified
+                if not bucket_name:
+                    bucket_name = config('AWS_S3_BUCKET', default='onboarding-uisep')
+                
+                logger.info(f"Reading QR codes from file: {filename} in bucket: {bucket_name}")
+                
+                # Initialize QR reader
+                logger.debug("Initializing QRCodeReader")
+                qr_reader = QRCodeReader()
+                
+                # Read QR codes
+                logger.info("Starting QR code detection")
+                result = qr_reader.read_qr_from_s3(filename)
+                
+                logger.info(f"QR reading completed - Success: {result['success']}, "
+                          f"QR Codes found: {result['metadata']['total_qr_codes']}")
+                
+                # Determine response status based on results
+                if result['success']:
+                    logger.info(f"QR codes detected successfully: {result['metadata']['total_qr_codes']} code(s)")
+                    return Response(result, status=status.HTTP_200_OK)
+                else:
+                    logger.warning(f"QR reading failed: {result['error']}")
+                    return Response(result, status=status.HTTP_404_NOT_FOUND if '404' in result['error_code'] else status.HTTP_400_BAD_REQUEST)
+                
+            except Exception as e:
+                logger.error(f"Unexpected error in QR Reader endpoint: {str(e)}")
+                logger.error(f"Exception type: {type(e).__name__}")
+                
+                error_response = {
+                    'success': False,
+                    'error': f'Unexpected QR reading error: {str(e)}',
+                    'error_code': '500_QR_Unexpected_Error',
+                    'qr_codes': [],
+                    'metadata': {
+                        'filename': serializer.validated_data.get('filename', 'unknown'),
+                        'total_qr_codes': 0,
+                        'processing_type': 'qr_code_detection'
+                    }
+                }
+                return Response(error_response, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        else:
+            logger.warning(f"QR Code serializer validation failed: {serializer.errors}")
+            return Response({
+                'success': False,
+                'error': 'Invalid request data for QR code reading',
+                'error_code': '400_QR_Validation_Error',
+                'validation_errors': serializer.errors,
+                'qr_codes': [],
+                'metadata': {
+                    'total_qr_codes': 0,
+                    'processing_type': 'qr_code_detection'
+                }
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class QRCodeBatchView(generics.CreateAPIView):
+    """
+    Endpoint para leer códigos QR de múltiples imágenes en batch
+    Procesa múltiples archivos y devuelve todos los códigos QR encontrados
+    """
+    serializer_class = QRCodeBatchSerializer
+    #permission_classes = [IsAuthenticated]
+    
+    def post(self, request, format=None):
+        logger.info("Batch QR Code Reader endpoint accessed")
+        logger.debug(f"Batch QR request data: {request.data}")
+        
+        serializer = QRCodeBatchSerializer(data=request.data)
+        if serializer.is_valid():
+            logger.debug("Batch QR serializer validation successful")
+            
+            try:
+                # Get validated data
+                file_list = serializer.validated_data['file_list']
+                bucket_name = serializer.validated_data.get('bucket_name', None)
+                
+                # Use default bucket if not specified
+                if not bucket_name:
+                    bucket_name = config('AWS_S3_BUCKET', default='onboarding-uisep')
+                
+                logger.info(f"Processing batch QR reading for {len(file_list)} files in bucket: {bucket_name}")
+                logger.debug(f"Files to process: {file_list}")
+                
+                # Initialize QR reader
+                logger.debug("Initializing QRCodeReader for batch processing")
+                qr_reader = QRCodeReader()
+                
+                # Process files in batch
+                logger.info("Starting batch QR code detection")
+                result = qr_reader.read_qr_batch(file_list)
+                
+                logger.info(f"Batch QR reading completed - Success: {result['success']}, "
+                          f"Processed: {result['files_processed']}, "
+                          f"Successful: {result['files_successful']}, "
+                          f"Failed: {result['files_failed']}, "
+                          f"Total QR Codes: {result['total_qr_codes']}")
+                
+                # Determine response status
+                if result['success']:
+                    logger.info("All files processed successfully")
+                    return Response(result, status=status.HTTP_200_OK)
+                elif result['files_successful'] > 0:
+                    logger.warning(f"Partial success: {result['files_failed']} files failed")
+                    return Response(result, status=status.HTTP_207_MULTI_STATUS)
+                else:
+                    logger.error("All files failed to process")
+                    return Response(result, status=status.HTTP_400_BAD_REQUEST)
+                
+            except Exception as e:
+                logger.error(f"Unexpected error in Batch QR Reader endpoint: {str(e)}")
+                logger.error(f"Exception type: {type(e).__name__}")
+                
+                error_response = {
+                    'success': False,
+                    'files_processed': 0,
+                    'files_successful': 0,
+                    'files_failed': len(serializer.validated_data.get('file_list', [])),
+                    'total_qr_codes': 0,
+                    'error': f'Unexpected batch QR reading error: {str(e)}',
+                    'error_code': '500_Batch_QR_Unexpected_Error',
+                    'results': [],
+                    'errors': [{
+                        'error': str(e),
+                        'error_code': '500_Batch_QR_Unexpected_Error',
+                        'exception_type': type(e).__name__
+                    }]
+                }
+                return Response(error_response, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        else:
+            logger.warning(f"Batch QR serializer validation failed: {serializer.errors}")
+            return Response({
+                'success': False,
+                'files_processed': 0,
+                'files_successful': 0,
+                'files_failed': 0,
+                'total_qr_codes': 0,
+                'error': 'Invalid request data for batch QR reading',
+                'error_code': '400_Batch_QR_Validation_Error',
+                'validation_errors': serializer.errors,
+                'results': [],
+                'errors': []
             }, status=status.HTTP_400_BAD_REQUEST)

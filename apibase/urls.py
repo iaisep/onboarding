@@ -29,6 +29,8 @@ path('upload/', views.FileUploadView.as_view()),
 path('textract-id/', views.TextractIDAnalysisView.as_view()),
 path('textract-general/', views.TextractGeneralAnalysisView.as_view()),
 path('face/', views.Compare3.as_view()),
+path('qr-read/', views.QRCodeReaderView.as_view()),
+path('qr-batch/', views.QRCodeBatchView.as_view()),
 path('admin/', admin.site.urls),
 path('login/', views.login),
 ]

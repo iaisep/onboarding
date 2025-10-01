@@ -180,3 +180,87 @@ class BatchOCRSerializer(serializers.Serializer):
         return data
 
 
+class QRCodeSerializer(serializers.Serializer):
+    """
+    Serializer para lectura de códigos QR desde S3
+    """
+    filename = serializers.CharField(
+        max_length=255,
+        help_text="Nombre del archivo en S3 que contiene el código QR",
+        required=True
+    )
+    
+    bucket_name = serializers.CharField(
+        max_length=255,
+        help_text="Nombre del bucket S3 (opcional, usa el bucket por defecto si no se especifica)",
+        required=False,
+        allow_blank=True
+    )
+    
+    def validate_filename(self, value):
+        """
+        Validar que el nombre del archivo tenga una extensión válida
+        """
+        valid_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.gif']
+        
+        if not value:
+            raise serializers.ValidationError("El nombre del archivo no puede estar vacío")
+        
+        # Obtener extensión del archivo
+        try:
+            file_extension = f".{value.lower().split('.')[-1]}"
+        except:
+            raise serializers.ValidationError(f"Nombre de archivo inválido: '{value}'")
+        
+        if file_extension not in valid_extensions:
+            raise serializers.ValidationError(
+                f"Archivo '{value}' no tiene una extensión válida para lectura de QR. "
+                f"Extensiones permitidas: {', '.join(valid_extensions)}"
+            )
+        
+        return value
+
+
+class QRCodeBatchSerializer(serializers.Serializer):
+    """
+    Serializer para lectura batch de códigos QR
+    """
+    file_list = serializers.ListField(
+        child=serializers.CharField(max_length=255),
+        min_length=1,
+        max_length=20,  # Máximo 20 archivos por batch
+        help_text="Lista de nombres de archivos a procesar",
+        required=True
+    )
+    
+    bucket_name = serializers.CharField(
+        max_length=255,
+        help_text="Nombre del bucket S3 (opcional)",
+        required=False,
+        allow_blank=True
+    )
+    
+    def validate_file_list(self, value):
+        """
+        Validar que todos los archivos tengan extensiones válidas
+        """
+        valid_extensions = ['.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.gif']
+        
+        for filename in value:
+            if not filename:
+                raise serializers.ValidationError("Los nombres de archivo no pueden estar vacíos")
+            
+            try:
+                file_extension = f".{filename.lower().split('.')[-1]}"
+            except:
+                raise serializers.ValidationError(f"Nombre de archivo inválido: '{filename}'")
+            
+            if file_extension not in valid_extensions:
+                raise serializers.ValidationError(
+                    f"Archivo '{filename}' no tiene una extensión válida. "
+                    f"Extensiones permitidas: {', '.join(valid_extensions)}"
+                )
+        
+        return value
+
+
