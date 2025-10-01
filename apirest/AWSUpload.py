@@ -120,11 +120,11 @@ class FileUploadS3:
             raise ValueError(f"Unknown file category for: {file_ext}")
 
     def _convert_pdf_to_images(self, pdf_content, original_filename):
-        """Convert PDF to high-quality JPG images"""
+        """Convert PDF to high-quality JPG images optimized for OCR"""
         if not PDF_CONVERSION_AVAILABLE:
             raise ImportError("PyMuPDF not available for PDF conversion. Install with: pip install PyMuPDF")
         
-        logger.info(f"Starting PDF to image conversion for: {original_filename}")
+        logger.info(f"Starting high-quality PDF to image conversion for: {original_filename}")
         
         try:
             # Open PDF from memory
@@ -137,13 +137,31 @@ class FileUploadS3:
                 # Get page
                 page = pdf_document.load_page(page_num)
                 
-                # Convert to high-quality image
-                # Higher matrix values = better quality
-                mat = fitz.Matrix(2.0, 2.0)  # 2x zoom for better quality
-                pix = page.get_pixmap(matrix=mat)
+                # Convert to high-quality image for better OCR
+                # Matrix(3.0, 3.0) = 3x zoom = ~300 DPI (optimal for OCR)
+                # Higher DPI = better text recognition
+                mat = fitz.Matrix(3.0, 3.0)  # Increased from 2.0 to 3.0 for better quality
                 
-                # Convert to PIL Image
-                img_data = pix.pil_tobytes(format="JPEG", optimize=True)
+                # Get pixmap with high quality settings
+                # alpha=False removes transparency for smaller file size
+                pix = page.get_pixmap(matrix=mat, alpha=False)
+                
+                # Convert to PIL Image for additional optimization
+                from PIL import Image
+                import io
+                
+                # Create PIL Image from pixmap
+                img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                
+                # Apply sharpening for better OCR (optional but recommended)
+                from PIL import ImageEnhance
+                enhancer = ImageEnhance.Sharpness(img)
+                img = enhancer.enhance(1.2)  # Slight sharpening (1.0 = original)
+                
+                # Save as high-quality JPEG
+                output = io.BytesIO()
+                img.save(output, format='JPEG', quality=95, optimize=True, dpi=(300, 300))
+                img_data = output.getvalue()
                 
                 # Generate filename for this page
                 page_filename = f"{os.path.splitext(original_filename)[0]}_page_{page_num + 1}.jpg"
@@ -156,10 +174,10 @@ class FileUploadS3:
                     'size': len(img_data)
                 })
                 
-                logger.debug(f"Converted page {page_num + 1} to {len(img_data)} bytes")
+                logger.debug(f"Converted page {page_num + 1} to {len(img_data)} bytes at 300 DPI")
             
             pdf_document.close()
-            logger.info(f"PDF conversion completed - {len(converted_images)} images generated")
+            logger.info(f"High-quality PDF conversion completed - {len(converted_images)} images generated at 300 DPI")
             
             return converted_images
             
