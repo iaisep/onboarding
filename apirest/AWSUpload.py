@@ -137,10 +137,10 @@ class FileUploadS3:
                 # Get page
                 page = pdf_document.load_page(page_num)
                 
-                # Convert to high-quality image for better OCR
-                # Matrix(3.0, 3.0) = 3x zoom = ~300 DPI (optimal for OCR)
-                # Higher DPI = better text recognition
-                mat = fitz.Matrix(3.0, 3.0)  # Increased from 2.0 to 3.0 for better quality
+                # Convert to very high-quality image for maximum OCR accuracy
+                # Matrix(6.0, 6.0) = 6x zoom = ~600 DPI (double resolution test)
+                # Higher DPI = better text recognition, especially for small text
+                mat = fitz.Matrix(6.0, 6.0)  # Testing double resolution (3.0 → 6.0)
                 
                 # Get pixmap with high quality settings
                 # alpha=False removes transparency for smaller file size
@@ -158,9 +158,9 @@ class FileUploadS3:
                 enhancer = ImageEnhance.Sharpness(img)
                 img = enhancer.enhance(1.2)  # Slight sharpening (1.0 = original)
                 
-                # Save as high-quality JPEG
+                # Save as very high-quality JPEG with 600 DPI
                 output = io.BytesIO()
-                img.save(output, format='JPEG', quality=95, optimize=True, dpi=(300, 300))
+                img.save(output, format='JPEG', quality=95, optimize=True, dpi=(600, 600))
                 img_data = output.getvalue()
                 
                 # Generate filename for this page
@@ -174,10 +174,10 @@ class FileUploadS3:
                     'size': len(img_data)
                 })
                 
-                logger.debug(f"Converted page {page_num + 1} to {len(img_data)} bytes at 300 DPI")
+                logger.debug(f"Converted page {page_num + 1} to {len(img_data)} bytes at 600 DPI (6x zoom test)")
             
             pdf_document.close()
-            logger.info(f"High-quality PDF conversion completed - {len(converted_images)} images generated at 300 DPI")
+            logger.info(f"Very high-quality PDF conversion completed - {len(converted_images)} images generated at 600 DPI (6x zoom test)")
             
             return converted_images
             
