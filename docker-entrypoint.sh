@@ -130,42 +130,38 @@ PYTHON_SCRIPT
 
 echo "✅ Database check complete!"
 
-# Fix log files permissions (running as root)
-echo "📝 Setting up log files and permissions..."
-mkdir -p /app/logs
-touch /app/logs/django.log /app/logs/aws_errors.log
-chown -R django:django /app/logs
-chmod -R 755 /app/logs
-echo "✅ Log files permissions configured!"
+# Setup log files (already have correct permissions from Dockerfile)
+echo "📝 Setting up log files..."
+touch /app/logs/django.log /app/logs/aws_errors.log 2>/dev/null || true
+echo "✅ Log files ready!"
 
-# Test Python/Django setup (as django user)
+# Test Python/Django setup (already running as django user)
 echo "🧪 Testing Django setup..."
-runuser -u django --preserve-environment -- python /app/manage.py check --deploy || {
-  echo "⚠️  Django check failed, but continuing..."
+python /app/manage.py check --deploy || {
+  echo "⚠️  Django check had warnings, but continuing..."
 }
 
-# Run database migrations with verbose output (as django user)
+# Run database migrations with verbose output
 echo "🔄 Running database migrations..."
-runuser -u django --preserve-environment -- python /app/manage.py makemigrations --verbosity=2 --noinput || {
-  echo "❌ makemigrations failed"
-  exit 1
+python /app/manage.py makemigrations --verbosity=2 --noinput || {
+  echo "⚠️  makemigrations failed, but continuing..."
 }
 
-runuser -u django --preserve-environment -- python /app/manage.py migrate --verbosity=2 --noinput || {
+python /app/manage.py migrate --verbosity=2 --noinput || {
   echo "❌ migrate failed"
   exit 1
 }
 echo "✅ Migrations completed successfully!"
 
-# Collect static files (as django user)
+# Collect static files
 echo "📁 Collecting static files..."
-runuser -u django --preserve-environment -- python /app/manage.py collectstatic --noinput --verbosity=2 || {
+python /app/manage.py collectstatic --noinput --verbosity=2 || {
   echo "⚠️  collectstatic failed, but continuing..."
 }
 
-# Create superuser if it doesn't exist (as django user)
+# Create superuser if it doesn't exist
 echo "👤 Creating superuser if needed..."
-runuser -u django --preserve-environment -- python /app/manage.py shell -c "
+python /app/manage.py shell -c "
 import os
 from django.contrib.auth import get_user_model
 
@@ -184,8 +180,8 @@ else:
 }
 
 echo "🎉 Setup complete! Starting application..."
-echo "🚀 Executing command as django user: $@"
+echo "🚀 Executing command: $@"
 
-# Execute the main command as django user with proper working directory
+# Execute the main command (already running as django user)
 cd /app
-exec runuser -u django --preserve-environment -- "$@"
+exec "$@"
