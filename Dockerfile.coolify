@@ -28,10 +28,17 @@ RUN for i in 1 2 3; do \
             libzbar0 \
             libzbar-dev \
             libgl1-mesa-glx \
-            libglib2.0-0 && \
+            libglib2.0-0 \
+            libsm6 \
+            libxext6 \
+            libxrender-dev && \
         break || sleep 10; \
-    done && \
-    rm -rf /var/lib/apt/lists/*
+    done
+
+# Verify zbar installation
+RUN ldconfig && \
+    find /usr -name "libzbar.so*" && \
+    python3 -c "from ctypes.util import find_library; print('libzbar:', find_library('zbar'))" || echo "libzbar check completed"
 
 # Test DNS resolution
 RUN nslookup pypi.org || echo "DNS test failed but continuing..."
@@ -51,6 +58,10 @@ RUN for i in 1 2 3; do \
             --trusted-host files.pythonhosted.org && \
         break || sleep 15; \
     done
+
+# Verify pyzbar installation
+RUN python3 -c "from pyzbar import pyzbar; print('✅ pyzbar loaded successfully')" && \
+    python3 -c "import cv2; print('✅ opencv loaded successfully, version:', cv2.__version__)"
 
 # Copy project
 COPY . .
