@@ -48,11 +48,18 @@ RUN for i in 1 2 3; do \
             --trusted-host pypi.python.org \
             --trusted-host files.pythonhosted.org && \
         break || sleep 15; \
-    done
+    done && \
+    ldconfig
 
-# Verify pyzbar installation
-RUN python3 -c "from pyzbar import pyzbar; print('✅ pyzbar loaded successfully')" && \
-    python3 -c "import cv2; print('✅ opencv loaded successfully, version:', cv2.__version__)"
+# Verify pyzbar and opencv installation
+RUN python3 -c "from pyzbar import pyzbar; print('pyzbar loaded successfully')" || \
+    (echo "ERROR: pyzbar failed to load. Checking libzbar..." && \
+     find /usr -name "libzbar.so*" && \
+     ldconfig -p | grep zbar && \
+     exit 1)
+
+RUN python3 -c "import cv2; print('opencv loaded successfully, version:', cv2.__version__)" || \
+    (echo "ERROR: opencv failed to load" && exit 1)
 
 # Copy project
 COPY . .
