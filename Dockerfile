@@ -28,8 +28,12 @@ RUN for i in 1 2 3; do \
             libxext6 \
             libxrender-dev && \
         break || sleep 10; \
-    done && \
-    ln -sf /bin/nc.traditional /usr/bin/nc
+    done
+
+# Create symlink for netcat command
+RUN ln -sf /bin/nc.traditional /usr/bin/nc && \
+    which nc && \
+    nc -h 2>&1 | head -n 1
 
 # Verify zbar installation
 RUN ldconfig && \
