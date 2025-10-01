@@ -11,20 +11,25 @@ ENV LD_LIBRARY_PATH=/usr/local/lib:/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH
 # Set work directory
 WORKDIR /app
 
-# Install system dependencies - SIMPLIFIED
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        postgresql-client \
-        build-essential \
-        libpq-dev \
-        curl \
-        libzbar0 \
-        libzbar-dev \
-        libgl1-mesa-glx \
-        libglib2.0-0 \
-        libsm6 \
-        libxext6 \
-        libxrender-dev && \
+# Install system dependencies with retry logic
+RUN set -ex && \
+    for i in 1 2 3; do \
+        apt-get update && \
+        apt-get install -y --no-install-recommends \
+            postgresql-client \
+            build-essential \
+            libpq-dev \
+            curl \
+            libzbar0 \
+            libzbar-dev \
+            libgl1-mesa-glx \
+            libglib2.0-0 \
+            libsm6 \
+            libxext6 \
+            libxrender-dev && \
+        break || \
+        { echo "Retry $i failed"; sleep 5; }; \
+    done && \
     rm -rf /var/lib/apt/lists/* && \
     ldconfig
 
