@@ -30,10 +30,8 @@ RUN for i in 1 2 3; do \
         break || sleep 10; \
     done
 
-# Create symlink for netcat command
-RUN ln -sf /bin/nc.traditional /usr/bin/nc && \
-    which nc && \
-    nc -h 2>&1 | head -n 1
+# Create symlink for netcat command (netcat-traditional uses nc.traditional binary)
+RUN ln -sf /bin/nc.traditional /usr/bin/nc || ln -sf /usr/bin/nc.traditional /usr/bin/nc || true
 
 # Verify zbar installation
 RUN ldconfig && \
