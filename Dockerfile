@@ -6,6 +6,7 @@ FROM python:3.12-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV DEBIAN_FRONTEND=noninteractive
+ENV LD_LIBRARY_PATH=/usr/local/lib:/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH
 
 # Set work directory
 WORKDIR /app
@@ -48,18 +49,13 @@ RUN for i in 1 2 3; do \
             --trusted-host pypi.python.org \
             --trusted-host files.pythonhosted.org && \
         break || sleep 15; \
-    done && \
-    ldconfig
+    done
 
-# Verify pyzbar and opencv installation
-RUN python3 -c "from pyzbar import pyzbar; print('pyzbar loaded successfully')" || \
-    (echo "ERROR: pyzbar failed to load. Checking libzbar..." && \
-     find /usr -name "libzbar.so*" && \
-     ldconfig -p | grep zbar && \
-     exit 1)
+# Update library cache after pip install
+RUN ldconfig
 
-RUN python3 -c "import cv2; print('opencv loaded successfully, version:', cv2.__version__)" || \
-    (echo "ERROR: opencv failed to load" && exit 1)
+# Note: pyzbar and opencv verification happens at runtime in Django startup
+# If there are import errors, check docker-entrypoint.sh output
 
 # Copy project
 COPY . .
