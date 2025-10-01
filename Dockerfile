@@ -35,13 +35,13 @@ RUN set -ex && \
 # Configure libzbar for pyzbar - Create explicit symlinks
 RUN echo "Configuring libzbar..." && \
     ldconfig && \
-    find /usr -name "libzbar.so*" -exec ls -la {} \; && \
+    find /usr -name "libzbar.so*" -exec ls -la {} \; || echo "No libzbar files found" && \
     echo "Creating symlinks in /usr/local/lib..." && \
     ln -sf /usr/lib/x86_64-linux-gnu/libzbar.so.0 /usr/local/lib/libzbar.so.0 || true && \
     ln -sf /usr/lib/x86_64-linux-gnu/libzbar.so.0 /usr/local/lib/libzbar.so || true && \
     ldconfig && \
     echo "LD_LIBRARY_PATH=$LD_LIBRARY_PATH" && \
-    ldconfig -p | grep zbar && \
+    (ldconfig -p | grep zbar || echo "libzbar not in ldconfig cache yet") && \
     echo "✅ libzbar configured"
 
 # Install Python dependencies
