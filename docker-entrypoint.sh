@@ -135,6 +135,13 @@ echo "📝 Setting up log files..."
 touch /app/logs/django.log /app/logs/aws_errors.log 2>/dev/null || true
 echo "✅ Log files ready!"
 
+# Verify libzbar is accessible
+echo "🔍 Verifying QR code libraries..."
+export LD_LIBRARY_PATH=/usr/local/lib:/usr/lib/x86_64-linux-gnu:$LD_LIBRARY_PATH
+python3 -c "from pyzbar import pyzbar; print('✅ pyzbar loaded successfully')" 2>/dev/null && \
+    echo "✅ QR code support is ready" || \
+    echo "⚠️  pyzbar not available - QR endpoints may fail"
+
 # Test Python/Django setup (already running as django user)
 echo "🧪 Testing Django setup..."
 python /app/manage.py check --deploy || {
