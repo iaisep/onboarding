@@ -22,7 +22,7 @@ RUN set -ex && \
             curl \
             libzbar0 \
             libzbar-dev \
-            libgl1-mesa-glx \
+            libgl1 \
             libglib2.0-0 \
             libsm6 \
             libxext6 \
