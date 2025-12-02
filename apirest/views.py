@@ -11,6 +11,7 @@ from .AWScompare import consult46
 from .AWSUpload import FileUploadS3
 from .AWSTextract import TextractIDAnalyzer
 from .AWSQRReader import QRCodeReader
+from .AWSTextractBirthCertificate import TextractBirthCertificateAnalyzer
 from rest_framework import status
 from django.contrib.auth.models import User
 from django.contrib.auth.hashers import check_password
@@ -799,4 +800,139 @@ class QRCodeBatchView(generics.CreateAPIView):
                 'validation_errors': serializer.errors,
                 'results': [],
                 'errors': []
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class BatchBirthCertificateOCRView(generics.CreateAPIView):
+    """
+    Endpoint especializado para procesamiento OCR de Actas de Nacimiento (Birth Certificates)
+    
+    Utiliza AWS Textract detect_document_text con preprocesamiento de imagen optimizado
+    para mejor reconocimiento de texto en documentos oficiales mexicanos.
+    
+    Este endpoint está diseñado específicamente para actas de nacimiento y proporciona:
+    - Preprocesamiento de imagen (contraste, nitidez, etc.)
+    - Mayor precisión en documentos oficiales
+    - Compresión adaptativa para cumplir límites de Textract
+    
+    Request body:
+    {
+        "file_list": ["archivo1.jpg", "archivo2.jpg"],  # Lista de archivos en S3
+        "bucket_name": "nombre-bucket",                  # Opcional, usa default si no se especifica
+        "preprocess": true                               # Opcional, default true
+    }
+    """
+    serializer_class = BatchOCRSerializer
+    #permission_classes = [IsAuthenticated]
+    
+    def post(self, request, format=None):
+        logger.info("Batch Birth Certificate OCR endpoint accessed (Textract)")
+        logger.debug(f"Birth Certificate request data: {request.data}")
+        
+        serializer = BatchOCRSerializer(data=request.data)
+        if serializer.is_valid():
+            logger.debug("Birth Certificate OCR serializer validation successful")
+            
+            try:
+                # Get validated data
+                file_list = serializer.validated_data['file_list']
+                bucket_name = serializer.validated_data.get('bucket_name', None)
+                
+                # Get optional preprocess flag (default to True for birth certificates)
+                preprocess = request.data.get('preprocess', True)
+                if isinstance(preprocess, str):
+                    preprocess = preprocess.lower() in ('true', '1', 'yes')
+                
+                # Use default bucket if not specified
+                if not bucket_name:
+                    bucket_name = config('AWS_S3_BUCKET', default='onboarding-uisep')
+                
+                logger.info(f"Processing birth certificate OCR for {len(file_list)} files "
+                          f"in bucket: {bucket_name}, preprocess: {preprocess}")
+                logger.debug(f"Files to process: {file_list}")
+                
+                # Initialize birth certificate processor
+                logger.debug("Initializing TextractBirthCertificateAnalyzer for batch processing")
+                processor = TextractBirthCertificateAnalyzer()
+                
+                # Process files in batch using Textract
+                logger.info("Starting batch birth certificate OCR processing with Textract")
+                result = processor.analyze_birth_certificate_batch(
+                    file_list, 
+                    bucket_name, 
+                    preprocess=preprocess
+                )
+                
+                logger.info(f"Birth Certificate OCR completed - Success: {result['success']}, "
+                          f"Processed: {result['files_processed']}, "
+                          f"Successful: {result['files_successful']}, "
+                          f"Failed: {result['files_failed']}, "
+                          f"Avg Confidence: {result['metadata'].get('average_confidence', 0)}%")
+                
+                # Determine response status based on results
+                if result['success']:
+                    # All files processed successfully
+                    logger.info("All birth certificate files processed successfully")
+                    return Response(result, status=status.HTTP_200_OK)
+                elif result['files_successful'] > 0:
+                    # Some files processed successfully, some failed
+                    logger.warning(f"Partial birth certificate success: {result['files_failed']} files failed")
+                    return Response(result, status=status.HTTP_207_MULTI_STATUS)
+                else:
+                    # All files failed
+                    logger.error("All birth certificate files failed to process")
+                    return Response(result, status=status.HTTP_400_BAD_REQUEST)
+                
+            except Exception as e:
+                logger.error(f"Unexpected error in Birth Certificate OCR endpoint: {str(e)}")
+                logger.error(f"Exception type: {type(e).__name__}")
+                
+                error_response = {
+                    'success': False,
+                    'files_processed': 0,
+                    'files_successful': 0,
+                    'files_failed': len(serializer.validated_data.get('file_list', [])),
+                    'error': f'Unexpected birth certificate processing error: {str(e)}',
+                    'error_code': '500_Birth_Certificate_Unexpected_Error',
+                    'combined_response': {
+                        'Lines': [],
+                        'Words': [],
+                        'FullText': '',
+                        'BatchMetadata': []
+                    },
+                    'errors': [{
+                        'error': str(e),
+                        'error_code': '500_Birth_Certificate_Unexpected_Error',
+                        'exception_type': type(e).__name__
+                    }],
+                    'metadata': {
+                        'processing_type': 'batch_birth_certificate_textract',
+                        'total_lines': 0,
+                        'total_words': 0,
+                        'bucket': bucket_name if 'bucket_name' in locals() else 'unknown'
+                    }
+                }
+                return Response(error_response, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        else:
+            logger.warning(f"Birth Certificate OCR serializer validation failed: {serializer.errors}")
+            return Response({
+                'success': False,
+                'files_processed': 0,
+                'files_successful': 0,
+                'files_failed': 0,
+                'error': 'Invalid request data for birth certificate OCR processing',
+                'error_code': '400_Birth_Certificate_Validation_Error',
+                'validation_errors': serializer.errors,
+                'combined_response': {
+                    'Lines': [],
+                    'Words': [],
+                    'FullText': '',
+                    'BatchMetadata': []
+                },
+                'errors': [],
+                'metadata': {
+                    'processing_type': 'batch_birth_certificate_textract',
+                    'total_lines': 0,
+                    'total_words': 0
+                }
             }, status=status.HTTP_400_BAD_REQUEST)

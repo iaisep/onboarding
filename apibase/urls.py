@@ -25,6 +25,7 @@ path('lists/', views.restric.as_view()),
 path('ocr/', views.ocr2.as_view()),
 path('ocr-raw/', views.ocrRaw.as_view()),
 path('batch-ocr-raw/', views.BatchOCRRawView.as_view()),
+path('batch-ocr-acta/', views.BatchBirthCertificateOCRView.as_view()),  # Endpoint para Actas de Nacimiento
 path('upload/', views.FileUploadView.as_view()),
 path('textract-id/', views.TextractIDAnalysisView.as_view()),
 path('textract-general/', views.TextractGeneralAnalysisView.as_view()),
