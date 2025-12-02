@@ -119,12 +119,71 @@ class FileUploadS3:
         else:
             raise ValueError(f"Unknown file category for: {file_ext}")
 
+    def _compress_image_to_max_size(self, img, max_size_bytes=4.5 * 1024 * 1024, min_quality=50):
+        """
+        Compress image to ensure it doesn't exceed max_size_bytes (default 4.5MB).
+        Uses adaptive quality reduction and resizing if needed.
+        """
+        from PIL import Image
+        import io
+        
+        # Start with high quality
+        quality = 95
+        current_img = img.copy()
+        
+        while quality >= min_quality:
+            output = io.BytesIO()
+            current_img.save(output, format='JPEG', quality=quality, optimize=True, dpi=(300, 300))
+            img_data = output.getvalue()
+            
+            if len(img_data) <= max_size_bytes:
+                logger.debug(f"Image compressed to {len(img_data) / 1024 / 1024:.2f}MB at quality={quality}")
+                return img_data, quality
+            
+            # Reduce quality in steps
+            quality -= 5
+            logger.debug(f"Image too large ({len(img_data) / 1024 / 1024:.2f}MB), reducing quality to {quality}")
+        
+        # If quality reduction wasn't enough, resize the image
+        logger.info("Quality reduction insufficient, applying image resize")
+        scale_factor = 0.9
+        
+        while scale_factor >= 0.5:
+            new_width = int(current_img.width * scale_factor)
+            new_height = int(current_img.height * scale_factor)
+            resized_img = current_img.resize((new_width, new_height), Image.LANCZOS)
+            
+            # Try with quality 70 after resize
+            output = io.BytesIO()
+            resized_img.save(output, format='JPEG', quality=70, optimize=True, dpi=(300, 300))
+            img_data = output.getvalue()
+            
+            if len(img_data) <= max_size_bytes:
+                logger.debug(f"Image resized to {new_width}x{new_height} and compressed to {len(img_data) / 1024 / 1024:.2f}MB")
+                return img_data, 70
+            
+            scale_factor -= 0.1
+            logger.debug(f"Image still too large ({len(img_data) / 1024 / 1024:.2f}MB), reducing scale to {scale_factor:.1f}")
+        
+        # Final fallback: aggressive compression
+        logger.warning("Applying aggressive compression as fallback")
+        final_img = current_img.resize((int(current_img.width * 0.5), int(current_img.height * 0.5)), Image.LANCZOS)
+        output = io.BytesIO()
+        final_img.save(output, format='JPEG', quality=min_quality, optimize=True, dpi=(300, 300))
+        img_data = output.getvalue()
+        
+        logger.info(f"Final image size: {len(img_data) / 1024 / 1024:.2f}MB at quality={min_quality}")
+        return img_data, min_quality
+
     def _convert_pdf_to_images(self, pdf_content, original_filename):
-        """Convert PDF to high-quality JPG images optimized for OCR"""
+        """Convert PDF to high-quality JPG images optimized for OCR with max 4.5MB size limit"""
         if not PDF_CONVERSION_AVAILABLE:
             raise ImportError("PyMuPDF not available for PDF conversion. Install with: pip install PyMuPDF")
         
-        logger.info(f"Starting high-quality PDF to image conversion for: {original_filename}")
+        # Maximum image size in bytes (4.5MB)
+        MAX_IMAGE_SIZE = 4.5 * 1024 * 1024
+        
+        logger.info(f"Starting PDF to image conversion for: {original_filename} (max size: {MAX_IMAGE_SIZE / 1024 / 1024}MB)")
         
         try:
             # Open PDF from memory
@@ -158,10 +217,8 @@ class FileUploadS3:
                 enhancer = ImageEnhance.Sharpness(img)
                 img = enhancer.enhance(1.2)  # Slight sharpening (1.0 = original)
                 
-                # Save as high-quality JPEG with 300 DPI
-                output = io.BytesIO()
-                img.save(output, format='JPEG', quality=95, optimize=True, dpi=(300, 300))
-                img_data = output.getvalue()
+                # Compress image to ensure it doesn't exceed 4.5MB
+                img_data, final_quality = self._compress_image_to_max_size(img, MAX_IMAGE_SIZE)
                 
                 # Generate filename for this page
                 page_filename = f"{os.path.splitext(original_filename)[0]}_page_{page_num + 1}.jpg"
@@ -174,10 +231,10 @@ class FileUploadS3:
                     'size': len(img_data)
                 })
                 
-                logger.debug(f"Converted page {page_num + 1} to {len(img_data)} bytes at 300 DPI")
+                logger.debug(f"Converted page {page_num + 1} to {len(img_data) / 1024 / 1024:.2f}MB at quality={final_quality}")
             
             pdf_document.close()
-            logger.info(f"High-quality PDF conversion completed - {len(converted_images)} images generated at 300 DPI")
+            logger.info(f"PDF conversion completed - {len(converted_images)} images generated (max 4.5MB each)")
             
             return converted_images
             
