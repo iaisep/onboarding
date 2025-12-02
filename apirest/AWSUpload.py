@@ -377,12 +377,17 @@ class FileUploadS3:
             logger.warning(f"Error optimizing image, using original: {str(e)}")
             return image_content
 
-    def upload_file(self, file_content, filename):
+    def upload_file(self, file_content, filename, upload_original=True):
         """
         Main method to upload file to S3 with automatic conversion
         Returns detailed information about uploaded files
+        
+        Args:
+            file_content: Binary content of the file
+            filename: Original filename
+            upload_original: If True, also uploads the original file (PDF/image) to S3
         """
-        logger.info(f"Starting file upload process for: {filename}")
+        logger.info(f"Starting file upload process for: {filename} (upload_original={upload_original})")
         
         try:
             # Detect file type
@@ -393,6 +398,31 @@ class FileUploadS3:
             s3_client = self._get_s3_client()
             
             upload_results = []
+            original_file_info = None
+            
+            # Upload original file first if requested
+            if upload_original:
+                original_unique_filename = self._generate_unique_filename(filename)
+                content_type = mime_type or 'application/octet-stream'
+                
+                s3_client.put_object(
+                    Bucket=self.bucket_name,
+                    Key=original_unique_filename,
+                    Body=file_content,
+                    ContentType=content_type
+                )
+                
+                original_file_info = {
+                    'original_filename': filename,
+                    's3_filename': original_unique_filename,
+                    'file_type': 'original',
+                    'size': len(file_content),
+                    'content_type': content_type,
+                    'url': f"https://{self.bucket_name}.s3.{self.region_name}.amazonaws.com/{original_unique_filename}"
+                }
+                
+                upload_results.append(original_file_info)
+                logger.info(f"Original file uploaded successfully: {original_unique_filename}")
             
             if file_category == 'image':
                 # Handle image files
