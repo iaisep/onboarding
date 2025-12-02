@@ -119,60 +119,95 @@ class FileUploadS3:
         else:
             raise ValueError(f"Unknown file category for: {file_ext}")
 
-    def _compress_image_to_max_size(self, img, max_size_bytes=4.5 * 1024 * 1024, min_quality=50):
+    def _compress_image_to_max_size(self, img, max_size_bytes=4.5 * 1024 * 1024, min_quality=70):
         """
         Compress image to ensure it doesn't exceed max_size_bytes (default 4.5MB).
-        Uses adaptive quality reduction and resizing if needed.
+        Optimized for OCR: prioritizes text readability over file size.
+        Uses adaptive quality reduction and smart resizing.
+        
+        For documents with small text (like birth certificates), we:
+        1. First try reducing JPEG quality (down to min_quality=70)
+        2. Then resize while maintaining aspect ratio
+        3. Apply sharpening to preserve text edges
         """
-        from PIL import Image
+        from PIL import Image, ImageEnhance, ImageFilter
         import io
         
         # Start with high quality
         quality = 95
         current_img = img.copy()
+        original_width = current_img.width
+        original_height = current_img.height
         
+        logger.debug(f"Starting compression - Original size: {original_width}x{original_height}")
+        
+        # Phase 1: Try quality reduction only (preserves resolution for OCR)
         while quality >= min_quality:
             output = io.BytesIO()
             current_img.save(output, format='JPEG', quality=quality, optimize=True, dpi=(300, 300))
             img_data = output.getvalue()
             
             if len(img_data) <= max_size_bytes:
-                logger.debug(f"Image compressed to {len(img_data) / 1024 / 1024:.2f}MB at quality={quality}")
+                logger.debug(f"Image compressed to {len(img_data) / 1024 / 1024:.2f}MB at quality={quality} (no resize needed)")
                 return img_data, quality
             
-            # Reduce quality in steps
+            # Reduce quality in smaller steps to find optimal point
             quality -= 5
             logger.debug(f"Image too large ({len(img_data) / 1024 / 1024:.2f}MB), reducing quality to {quality}")
         
-        # If quality reduction wasn't enough, resize the image
-        logger.info("Quality reduction insufficient, applying image resize")
-        scale_factor = 0.9
+        # Phase 2: Smart resize - reduce dimensions while keeping text readable
+        # For OCR, minimum recommended is ~150 DPI, so we limit resize to 70% minimum
+        logger.info("Quality reduction insufficient, applying smart resize for OCR optimization")
         
-        while scale_factor >= 0.5:
-            new_width = int(current_img.width * scale_factor)
-            new_height = int(current_img.height * scale_factor)
+        # Reset quality to 80 for resized images (good balance for text)
+        resize_quality = 80
+        scale_factor = 0.95  # Start with minimal reduction
+        min_scale = 0.70  # Don't go below 70% to maintain OCR readability
+        
+        while scale_factor >= min_scale:
+            new_width = int(original_width * scale_factor)
+            new_height = int(original_height * scale_factor)
+            
+            # Use LANCZOS for best quality downscaling
             resized_img = current_img.resize((new_width, new_height), Image.LANCZOS)
             
-            # Try with quality 70 after resize
+            # Apply slight sharpening to compensate for resize blur (helps OCR)
+            enhancer = ImageEnhance.Sharpness(resized_img)
+            sharpened_img = enhancer.enhance(1.3)  # Moderate sharpening
+            
             output = io.BytesIO()
-            resized_img.save(output, format='JPEG', quality=70, optimize=True, dpi=(300, 300))
+            sharpened_img.save(output, format='JPEG', quality=resize_quality, optimize=True, dpi=(300, 300))
             img_data = output.getvalue()
             
             if len(img_data) <= max_size_bytes:
-                logger.debug(f"Image resized to {new_width}x{new_height} and compressed to {len(img_data) / 1024 / 1024:.2f}MB")
-                return img_data, 70
+                logger.debug(f"Image resized to {new_width}x{new_height} ({scale_factor*100:.0f}%) and compressed to {len(img_data) / 1024 / 1024:.2f}MB")
+                return img_data, resize_quality
             
-            scale_factor -= 0.1
-            logger.debug(f"Image still too large ({len(img_data) / 1024 / 1024:.2f}MB), reducing scale to {scale_factor:.1f}")
+            scale_factor -= 0.05
+            logger.debug(f"Image still too large ({len(img_data) / 1024 / 1024:.2f}MB), reducing scale to {scale_factor:.2f}")
         
-        # Final fallback: aggressive compression
-        logger.warning("Applying aggressive compression as fallback")
-        final_img = current_img.resize((int(current_img.width * 0.5), int(current_img.height * 0.5)), Image.LANCZOS)
+        # Phase 3: Final fallback - more aggressive but still OCR-friendly
+        logger.warning("Applying final compression strategy for large document")
+        
+        # Calculate the scale needed to approximate target size
+        # Estimate: if current is X MB at 70% scale, target scale = sqrt(4.5/X) * 0.7
+        current_size_mb = len(img_data) / 1024 / 1024
+        estimated_scale = min_scale * (max_size_bytes / 1024 / 1024 / current_size_mb) ** 0.5
+        estimated_scale = max(0.5, min(estimated_scale, min_scale))  # Keep between 50-70%
+        
+        final_width = int(original_width * estimated_scale)
+        final_height = int(original_height * estimated_scale)
+        
+        final_img = current_img.resize((final_width, final_height), Image.LANCZOS)
+        
+        # Apply unsharp mask for better text edge definition
+        final_img = final_img.filter(ImageFilter.UnsharpMask(radius=1, percent=100, threshold=2))
+        
         output = io.BytesIO()
         final_img.save(output, format='JPEG', quality=min_quality, optimize=True, dpi=(300, 300))
         img_data = output.getvalue()
         
-        logger.info(f"Final image size: {len(img_data) / 1024 / 1024:.2f}MB at quality={min_quality}")
+        logger.info(f"Final image: {final_width}x{final_height} ({estimated_scale*100:.0f}%), {len(img_data) / 1024 / 1024:.2f}MB at quality={min_quality}")
         return img_data, min_quality
 
     def _convert_pdf_to_images(self, pdf_content, original_filename):
