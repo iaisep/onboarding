@@ -562,7 +562,7 @@ class TextractUniversityTitleAnalyzer:
                 'error_code': '500_Analysis_Error'
             }
     
-    def batch_analyze(self, photos, bucket=None):
+    def analyze_batch(self, photos, bucket=None):
         """
         Analyze multiple degree certificate images
         
