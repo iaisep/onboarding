@@ -21,7 +21,7 @@ from datetime import datetime
 logger = logging.getLogger('apirest.textract_titulo')
 
 
-class TextractTituloAnalyzer:
+class TextractUniversityTitleAnalyzer:
     """
     Class specialized for extracting text and tables from university degree certificates
     Uses AWS Textract's analyze_document with TABLES and FORMS features
