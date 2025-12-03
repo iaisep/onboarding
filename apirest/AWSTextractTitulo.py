@@ -261,59 +261,140 @@ class TextractUniversityTitleAnalyzer:
         # Normalize text for comparison
         text_upper = text.upper().replace(' ', '').replace('\n', '')
         
-        # Known watermark patterns
+        # Known watermark patterns (including partial fragments)
         watermark_patterns = [
             'SISTEMAEDUCATIVONACIONAL',
             'SISTEMAEDUCATIVO',
+            'SISTEMAEDU',
+            'SISTEMAEDI',
             'EDUCATIVONACIONAL',
+            'EDUCATIVONACION',
+            'EDUCATIVO',
             'ISTEMAEDUCATIVONACIONAL',
+            'ISTEMAEDUCATIVO',
             'STEMAEDUCATIVONACIONAL',
             'TEMAEDUCATIVONACIONAL',
             'EMAEDUCATIVONACIONAL',
+            'EMAEDUCATIVON',
+            'EMAEDUCATIVOI',
+            'EMAEDUCATIVO',
             'MAEDUCATIVONACIONAL',
+            'MAEDUCATIVO',
             'AEDUCATIVONACIONAL',
-            'EDUCATIVONACION',
+            'AEDUCATIVO',
             'IVONACIONAL',
             'VONACIONAL',
             'ONACIONAL',
-            'NACIONAL',
+            'ONACIOSISTEMA',
         ]
         
-        # Check if text matches or contains watermark patterns
+        # If text is ONLY a watermark pattern (exact match or slight variation)
         for pattern in watermark_patterns:
-            if pattern in text_upper:
+            if text_upper == pattern:
                 return True
-            # Also check if text is a fragment of the pattern (at least 15 chars)
-            if len(text_upper) >= 15 and text_upper in 'SISTEMAEDUCATIVONACIONAL':
+            # Check if text starts with pattern and is mostly pattern
+            if text_upper.startswith(pattern) and len(text_upper) < len(pattern) + 5:
+                return True
+        
+        # Check if text contains watermark patterns
+        for pattern in watermark_patterns:
+            if len(pattern) >= 10 and pattern in text_upper:
+                return True
+        
+        # Check if text is a fragment of the full watermark (at least 8 chars)
+        full_watermark = 'SISTEMAEDUCATIVONACIONAL'
+        if len(text_upper) >= 8 and len(text_upper) <= 30:
+            if text_upper in full_watermark:
                 return True
         
         # Check for repeated pattern fragments
         if len(text_upper) >= 10:
-            # If text is mostly repetition of "SISTEMAEDUCATIVONACIONAL" fragments
-            clean_text = text_upper.replace('SISTEMAEDUCATIVONACIONAL', '')
+            # If text is mostly repetition of watermark fragments
+            clean_text = text_upper
+            for pattern in ['SISTEMAEDUCATIVONACIONAL', 'SISTEMAEDUCATIVO', 'EDUCATIVONACIONAL', 'EDUCATIVO', 'SISTEMA']:
+                clean_text = clean_text.replace(pattern, '')
             if len(clean_text) < len(text_upper) * 0.3:  # More than 70% was watermark
                 return True
         
         return False
     
+    def _clean_watermark_from_text(self, text):
+        """
+        Remove watermark fragments from text that contains mixed content
+        Returns cleaned text or None if text becomes empty/meaningless
+        """
+        if not text:
+            return None
+            
+        original_text = text
+        
+        # Patterns to remove (order matters - longer patterns first)
+        watermark_fragments = [
+            'SISTEMAEDUCATIVONACIONAL',
+            'SISTEMAEDUCATIVO',
+            'EDUCATIVONACIONAL',
+            'ISTEMAEDUCATIVO',
+            'EMAEDUCATIVON',
+            'EMAEDUCATIVO',
+            'SISTEMAEDU',
+            'SISTEMAEDI',
+            'EDUCATIVO',
+            'ONACIONAL',
+            'SISTEMA',
+            ' AL ',  # Common artifact
+        ]
+        
+        text_clean = text
+        for fragment in watermark_fragments:
+            text_clean = re.sub(re.escape(fragment), '', text_clean, flags=re.IGNORECASE)
+        
+        # Clean up multiple spaces and trim
+        text_clean = re.sub(r'\s+', ' ', text_clean).strip()
+        
+        # If text became too short or empty, return None
+        if len(text_clean) < 3:
+            return None
+            
+        # If we removed more than 50% of the text, it was mostly watermark
+        if len(text_clean) < len(original_text) * 0.5:
+            return None
+            
+        return text_clean
+
     def _filter_watermarks(self, items, text_key='text'):
         """
         Filter out watermark text from a list of items (lines or words)
+        Also cleans mixed content where watermark appears with real text
         
         Args:
             items: List of dicts containing text data
             text_key: Key to access text in each item dict
             
         Returns:
-            List of items with watermarks removed
+            List of items with watermarks removed or cleaned
         """
         filtered = []
         for item in items:
             text = item.get(text_key, '')
-            if not self._is_watermark_text(text):
-                filtered.append(item)
-            else:
+            
+            # First check if it's purely watermark
+            if self._is_watermark_text(text):
                 logger.debug(f"Filtered watermark text: {text[:50]}...")
+                continue
+            
+            # Try to clean mixed content
+            cleaned_text = self._clean_watermark_from_text(text)
+            if cleaned_text is None:
+                logger.debug(f"Filtered after cleaning: {text[:50]}...")
+                continue
+            
+            # Update text if it was cleaned
+            if cleaned_text != text:
+                item = item.copy()  # Don't modify original
+                item[text_key] = cleaned_text
+                logger.debug(f"Cleaned text: '{text[:30]}...' -> '{cleaned_text[:30]}...'")
+            
+            filtered.append(item)
         
         return filtered
 
