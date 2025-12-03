@@ -250,6 +250,73 @@ class TextractUniversityTitleAnalyzer:
         
         return tables
     
+    def _is_watermark_text(self, text):
+        """
+        Check if text is a watermark pattern that should be filtered out
+        Common watermarks in Mexican educational documents
+        """
+        if not text:
+            return False
+            
+        # Normalize text for comparison
+        text_upper = text.upper().replace(' ', '').replace('\n', '')
+        
+        # Known watermark patterns
+        watermark_patterns = [
+            'SISTEMAEDUCATIVONACIONAL',
+            'SISTEMAEDUCATIVO',
+            'EDUCATIVONACIONAL',
+            'ISTEMAEDUCATIVONACIONAL',
+            'STEMAEDUCATIVONACIONAL',
+            'TEMAEDUCATIVONACIONAL',
+            'EMAEDUCATIVONACIONAL',
+            'MAEDUCATIVONACIONAL',
+            'AEDUCATIVONACIONAL',
+            'EDUCATIVONACION',
+            'IVONACIONAL',
+            'VONACIONAL',
+            'ONACIONAL',
+            'NACIONAL',
+        ]
+        
+        # Check if text matches or contains watermark patterns
+        for pattern in watermark_patterns:
+            if pattern in text_upper:
+                return True
+            # Also check if text is a fragment of the pattern (at least 15 chars)
+            if len(text_upper) >= 15 and text_upper in 'SISTEMAEDUCATIVONACIONAL':
+                return True
+        
+        # Check for repeated pattern fragments
+        if len(text_upper) >= 10:
+            # If text is mostly repetition of "SISTEMAEDUCATIVONACIONAL" fragments
+            clean_text = text_upper.replace('SISTEMAEDUCATIVONACIONAL', '')
+            if len(clean_text) < len(text_upper) * 0.3:  # More than 70% was watermark
+                return True
+        
+        return False
+    
+    def _filter_watermarks(self, items, text_key='text'):
+        """
+        Filter out watermark text from a list of items (lines or words)
+        
+        Args:
+            items: List of dicts containing text data
+            text_key: Key to access text in each item dict
+            
+        Returns:
+            List of items with watermarks removed
+        """
+        filtered = []
+        for item in items:
+            text = item.get(text_key, '')
+            if not self._is_watermark_text(text):
+                filtered.append(item)
+            else:
+                logger.debug(f"Filtered watermark text: {text[:50]}...")
+        
+        return filtered
+
     def _extract_courses_from_tables(self, tables):
         """
         Extract course/subject information from detected tables
@@ -484,7 +551,6 @@ class TextractUniversityTitleAnalyzer:
                         'geometry': block.get('Geometry', {})
                     }
                     lines.append(line_data)
-                    all_text.append(block.get('Text', ''))
                     
                 elif block['BlockType'] == 'WORD':
                     word_data = {
@@ -493,6 +559,19 @@ class TextractUniversityTitleAnalyzer:
                         'geometry': block.get('Geometry', {})
                     }
                     words.append(word_data)
+            
+            # Filter out watermarks from lines and words
+            original_lines_count = len(lines)
+            original_words_count = len(words)
+            
+            lines = self._filter_watermarks(lines, 'text')
+            words = self._filter_watermarks(words, 'text')
+            
+            logger.info(f"Watermark filtering: Lines {original_lines_count} -> {len(lines)}, "
+                       f"Words {original_words_count} -> {len(words)}")
+            
+            # Build all_text from filtered lines
+            all_text = [line.get('text', '') for line in lines]
             
             # Extract tables
             tables = self._extract_tables_from_blocks(blocks)
