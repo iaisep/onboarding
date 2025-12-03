@@ -65,27 +65,35 @@ class TextractUniversityTitleAnalyzer:
     def _enhance_for_document_ocr(self, image):
         """
         Apply enhancements specifically optimized for printed documents with tables
+        Includes watermark removal through exposure/brightness adjustment
         """
         # Convert to RGB if necessary
         if image.mode != 'RGB':
             image = image.convert('RGB')
             logger.debug("Converted image mode to RGB")
         
-        # Auto-contrast to normalize lighting
-        image = ImageOps.autocontrast(image, cutoff=0.5)
+        # STEP 1: Increase brightness/exposure significantly to wash out watermarks
+        # This mimics the exposure=100 setting that removes watermarks
+        brightness_enhancer = ImageEnhance.Brightness(image)
+        image = brightness_enhancer.enhance(1.5)  # Increase brightness by 50%
+        logger.debug("Applied brightness enhancement (1.5x) to reduce watermarks")
+        
+        # STEP 2: Auto-contrast to normalize after brightness boost
+        image = ImageOps.autocontrast(image, cutoff=1)
         logger.debug("Applied auto-contrast")
         
-        # Increase contrast for better text visibility
+        # STEP 3: Increase contrast to bring back text definition
+        # This mimics the contrast=59 setting
         contrast_enhancer = ImageEnhance.Contrast(image)
-        image = contrast_enhancer.enhance(1.4)
-        logger.debug("Applied contrast enhancement (1.4x)")
+        image = contrast_enhancer.enhance(1.6)  # Higher contrast to recover text
+        logger.debug("Applied contrast enhancement (1.6x)")
         
-        # Increase sharpness for clear text
+        # STEP 4: Increase sharpness for clear text
         sharpness_enhancer = ImageEnhance.Sharpness(image)
         image = sharpness_enhancer.enhance(2.0)
         logger.debug("Applied sharpness enhancement (2.0x)")
         
-        # Apply unsharp mask for crisp text
+        # STEP 5: Apply unsharp mask for crisp text
         image = image.filter(ImageFilter.UnsharpMask(radius=1.5, percent=150, threshold=2))
         logger.debug("Applied UnsharpMask filter")
         
