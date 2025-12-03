@@ -14,6 +14,7 @@ from .AWSQRReader import QRCodeReader
 from .AWSTextractBirthCertificate import TextractBirthCertificateAnalyzer
 from .AWSTextractPassport import TextractPassportAnalyzer
 from .AWSTextractCertificado import TextractCertificadoAnalyzer
+from .AWSTextractTitulo import TextractUniversityTitleAnalyzer
 from rest_framework import status
 from django.contrib.auth.models import User
 from django.contrib.auth.hashers import check_password
@@ -1358,6 +1359,237 @@ class BatchCertificadoOCRView(generics.CreateAPIView):
                 'errors': [],
                 'metadata': {
                     'processing_type': 'batch_certificado_textract_tables',
+                    'total_lines': 0,
+                    'total_words': 0
+                }
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class BatchTituloOCRView(generics.CreateAPIView):
+    """
+    Endpoint especializado para procesamiento OCR de Títulos Universitarios/Licenciaturas
+    
+    Utiliza AWS Textract analyze_document con detección de TABLAS para extraer
+    información estructurada de títulos universitarios y certificados de estudios.
+    
+    Este endpoint está diseñado específicamente para títulos universitarios y proporciona:
+    - Detección automática de tablas (códigos de materias, créditos, calificaciones)
+    - Extracción de información del título (nombre del programa, institución, fecha)
+    - Extracción de materias con formato de código (ej: PSY101, MAT201)
+    - Preprocesamiento optimizado para documentos oficiales
+    
+    Request body:
+    {
+        "file_list": ["titulo1.jpg", "titulo2.jpg"],
+        "bucket_name": "nombre-bucket"  # Opcional
+    }
+    """
+    serializer_class = BatchOCRSerializer
+    #permission_classes = [IsAuthenticated]
+    
+    def post(self, request, format=None):
+        logger.info("Batch Titulo OCR endpoint accessed (Textract Tables)")
+        logger.debug(f"Titulo request data: {request.data}")
+        
+        serializer = BatchOCRSerializer(data=request.data)
+        if serializer.is_valid():
+            logger.debug("Titulo OCR serializer validation successful")
+            
+            try:
+                # Get validated data
+                file_list = serializer.validated_data['file_list']
+                bucket_name = serializer.validated_data.get('bucket_name', None)
+                
+                # Use default bucket if not specified
+                if not bucket_name:
+                    bucket_name = config('AWS_S3_BUCKET', default='onboarding-uisep')
+                
+                logger.info(f"Processing titulo OCR for {len(file_list)} files in bucket: {bucket_name}")
+                logger.debug(f"Files to process: {file_list}")
+                
+                # Initialize titulo processor
+                logger.debug("Initializing TextractUniversityTitleAnalyzer for batch processing")
+                processor = TextractUniversityTitleAnalyzer()
+                
+                # Process files in batch
+                logger.info("Starting batch titulo OCR processing with Textract Tables")
+                result = processor.analyze_batch(file_list, bucket_name)
+                
+                # Format response
+                combined_lines = []
+                combined_words = []
+                full_texts = []
+                batch_metadata = []
+                all_tables = []
+                all_courses = []
+                degree_info = {}
+                errors = []
+                
+                for item in result.get('results', []):
+                    photo = item.get('photo', '')
+                    item_result = item.get('result', {})
+                    
+                    if item_result.get('success'):
+                        extracted = item_result.get('extracted_data', {})
+                        lines = extracted.get('lines', [])
+                        words = extracted.get('words', [])
+                        
+                        for line in lines:
+                            combined_lines.append({
+                                'Text': line.get('text', ''),
+                                'Confidence': line.get('confidence', 0),
+                                'Geometry': line.get('geometry', {}),
+                                'SourceFile': photo
+                            })
+                        
+                        for word in words:
+                            combined_words.append({
+                                'Text': word.get('text', ''),
+                                'Confidence': word.get('confidence', 0),
+                                'Geometry': word.get('geometry', {}),
+                                'SourceFile': photo
+                            })
+                        
+                        full_texts.append(extracted.get('full_text', ''))
+                        
+                        # Collect tables
+                        tables = item_result.get('tables', [])
+                        all_tables.extend(tables)
+                        
+                        # Collect courses
+                        courses = item_result.get('courses', [])
+                        all_courses.extend(courses)
+                        
+                        # Get degree info (from first successful page)
+                        if not degree_info.get('titulo_nombre'):
+                            degree_info = item_result.get('degree_info', {})
+                        
+                        batch_metadata.append({
+                            'photo': photo,
+                            'line_count': extracted.get('line_count', 0),
+                            'word_count': extracted.get('word_count', 0),
+                            'average_confidence': extracted.get('average_confidence', 0),
+                            'tables_found': len(tables),
+                            'courses_extracted': len(courses)
+                        })
+                    else:
+                        errors.append({
+                            'photo': photo,
+                            'error': item_result.get('error', 'Unknown error'),
+                            'error_code': item_result.get('error_code', '500_Unknown')
+                        })
+                
+                # Calculate overall statistics
+                total_lines = len(combined_lines)
+                total_words = len(combined_words)
+                confidences = [line.get('Confidence', 0) for line in combined_lines]
+                avg_confidence = sum(confidences) / len(confidences) if confidences else 0
+                
+                # Format courses for easy consumption
+                formatted_courses = []
+                for course in all_courses:
+                    formatted_courses.append({
+                        'Codigo': course.get('codigo', ''),
+                        'Materia': course.get('nombre_materia', ''),
+                        'Creditos': course.get('creditos', ''),
+                        'Calificacion': course.get('calificacion', ''),
+                        'RawData': course.get('raw_row', [])
+                    })
+                
+                response_data = {
+                    'success': result.get('successful', 0) > 0,
+                    'files_processed': result.get('total_processed', 0),
+                    'files_successful': result.get('successful', 0),
+                    'files_failed': result.get('errors', 0),
+                    'combined_response': {
+                        'Lines': combined_lines,
+                        'Words': combined_words,
+                        'FullText': '\n\n--- PAGE BREAK ---\n\n'.join(full_texts),
+                        'BatchMetadata': batch_metadata
+                    },
+                    'degree_info': degree_info,
+                    'courses': formatted_courses,
+                    'tables_data': all_tables,
+                    'errors': errors,
+                    'metadata': {
+                        'processing_type': 'batch_titulo_textract_tables',
+                        'total_lines': total_lines,
+                        'total_words': total_words,
+                        'average_confidence': round(avg_confidence, 2),
+                        'total_tables_found': len(all_tables),
+                        'total_courses_extracted': len(formatted_courses),
+                        'bucket': bucket_name
+                    }
+                }
+                
+                logger.info(f"Titulo OCR completed - Success: {response_data['success']}, "
+                          f"Processed: {response_data['files_processed']}, "
+                          f"Tables: {len(all_tables)}, Courses: {len(formatted_courses)}, "
+                          f"Avg Confidence: {avg_confidence:.2f}%")
+                
+                # Determine response status
+                if response_data['files_failed'] == 0:
+                    return Response(response_data, status=status.HTTP_200_OK)
+                elif response_data['files_successful'] > 0:
+                    return Response(response_data, status=status.HTTP_207_MULTI_STATUS)
+                else:
+                    return Response(response_data, status=status.HTTP_400_BAD_REQUEST)
+                
+            except Exception as e:
+                logger.error(f"Unexpected error in Titulo OCR endpoint: {str(e)}")
+                logger.error(f"Exception type: {type(e).__name__}")
+                
+                error_response = {
+                    'success': False,
+                    'files_processed': 0,
+                    'files_successful': 0,
+                    'files_failed': len(serializer.validated_data.get('file_list', [])),
+                    'error': f'Unexpected titulo processing error: {str(e)}',
+                    'error_code': '500_Titulo_Unexpected_Error',
+                    'combined_response': {
+                        'Lines': [],
+                        'Words': [],
+                        'FullText': '',
+                        'BatchMetadata': []
+                    },
+                    'degree_info': {},
+                    'courses': [],
+                    'tables_data': [],
+                    'errors': [{
+                        'error': str(e),
+                        'error_code': '500_Titulo_Unexpected_Error',
+                        'exception_type': type(e).__name__
+                    }],
+                    'metadata': {
+                        'processing_type': 'batch_titulo_textract_tables',
+                        'total_lines': 0,
+                        'total_words': 0,
+                        'bucket': bucket_name if 'bucket_name' in locals() else 'unknown'
+                    }
+                }
+                return Response(error_response, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        else:
+            logger.warning(f"Titulo OCR serializer validation failed: {serializer.errors}")
+            return Response({
+                'success': False,
+                'files_processed': 0,
+                'files_successful': 0,
+                'files_failed': 0,
+                'error': 'Invalid request data for titulo OCR processing',
+                'error_code': '400_Titulo_Validation_Error',
+                'validation_errors': serializer.errors,
+                'combined_response': {
+                    'Lines': [],
+                    'Words': [],
+                    'FullText': '',
+                    'BatchMetadata': []
+                },
+                'degree_info': {},
+                'courses': [],
+                'tables_data': [],
+                'errors': [],
+                'metadata': {
+                    'processing_type': 'batch_titulo_textract_tables',
                     'total_lines': 0,
                     'total_words': 0
                 }

@@ -28,6 +28,7 @@ path('batch-ocr-raw/', views.BatchOCRRawView.as_view()),
 path('batch-ocr-acta/', views.BatchBirthCertificateOCRView.as_view()),  # Endpoint para Actas de Nacimiento
 path('batch-ocr-passport/', views.BatchPassportOCRView.as_view()),  # Endpoint para Pasaportes
 path('batch-ocr-certificado/', views.BatchCertificadoOCRView.as_view()),  # Endpoint para Certificados de Notas
+path('batch-ocr-titulo/', views.BatchTituloOCRView.as_view()),  # Endpoint para Títulos Universitarios/Licenciaturas
 path('upload/', views.FileUploadView.as_view()),
 path('textract-id/', views.TextractIDAnalysisView.as_view()),
 path('textract-general/', views.TextractGeneralAnalysisView.as_view()),
