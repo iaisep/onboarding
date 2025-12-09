@@ -45,6 +45,9 @@ cryptography==43.0.0
 # WSGI Server
 gunicorn==23.0.0
 
+# PDF Generation
+weasyprint==62.3
+
 # Development Tools (optional)
 # fabric==3.2.2
 

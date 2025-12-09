@@ -29,6 +29,7 @@ path('batch-ocr-acta/', views.BatchBirthCertificateOCRView.as_view()),  # Endpoi
 path('batch-ocr-passport/', views.BatchPassportOCRView.as_view()),  # Endpoint para Pasaportes
 path('batch-ocr-certificado/', views.BatchCertificadoOCRView.as_view()),  # Endpoint para Certificados de Notas
 path('batch-ocr-titulo/', views.BatchTituloOCRView.as_view()),  # Endpoint para Títulos Universitarios/Licenciaturas
+path('html-to-pdf/', views.HTMLToPDFView.as_view()),  # Endpoint para convertir HTML a PDF
 path('upload/', views.FileUploadView.as_view()),
 path('textract-id/', views.TextractIDAnalysisView.as_view()),
 path('textract-general/', views.TextractGeneralAnalysisView.as_view()),

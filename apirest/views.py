@@ -15,6 +15,7 @@ from .AWSTextractBirthCertificate import TextractBirthCertificateAnalyzer
 from .AWSTextractPassport import TextractPassportAnalyzer
 from .AWSTextractCertificado import TextractCertificadoAnalyzer
 from .AWSTextractTitulo import TextractUniversityTitleAnalyzer
+from .HTMLtoPDF import HTMLToPDFConverter
 from rest_framework import status
 from django.contrib.auth.models import User
 from django.contrib.auth.hashers import check_password
@@ -1594,3 +1595,94 @@ class BatchTituloOCRView(generics.CreateAPIView):
                     'total_words': 0
                 }
             }, status=status.HTTP_400_BAD_REQUEST)
+
+
+class HTMLToPDFView(generics.CreateAPIView):
+    """
+    Endpoint para convertir HTML a PDF
+    
+    Recibe contenido HTML y opcionalmente CSS, devuelve un PDF.
+    Soporta dos modos de respuesta:
+    - JSON con PDF en base64 (por defecto)
+    - Descarga directa del archivo PDF (con return_file=true)
+    
+    Request body:
+    {
+        "html_content": "<html>...</html>",
+        "css_content": "body { font-family: Arial; }",  # Opcional
+        "base_url": "https://example.com",  # Opcional, para resolver URLs relativas
+        "return_file": false,  # Opcional, true para descarga directa
+        "filename": "document.pdf"  # Opcional, nombre del archivo
+    }
+    """
+    #permission_classes = [IsAuthenticated]
+    
+    def post(self, request, format=None):
+        logger.info("HTML to PDF conversion endpoint accessed")
+        
+        try:
+            # Get request data
+            html_content = request.data.get('html_content', '')
+            css_content = request.data.get('css_content', None)
+            base_url = request.data.get('base_url', None)
+            return_file = request.data.get('return_file', False)
+            filename = request.data.get('filename', 'document.pdf')
+            
+            if not html_content:
+                logger.warning("HTML to PDF request missing html_content")
+                return Response({
+                    'success': False,
+                    'error': 'html_content is required',
+                    'error_code': '400_Missing_HTML'
+                }, status=status.HTTP_400_BAD_REQUEST)
+            
+            logger.info(f"Converting HTML to PDF. HTML length: {len(html_content)}, return_file: {return_file}")
+            
+            # Initialize converter
+            converter = HTMLToPDFConverter()
+            
+            if return_file:
+                # Return PDF as file download
+                try:
+                    pdf_bytes = converter.convert_html_to_pdf_bytes(html_content, css_content, base_url)
+                    
+                    response = HttpResponse(pdf_bytes, content_type='application/pdf')
+                    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+                    response['Content-Length'] = len(pdf_bytes)
+                    
+                    logger.info(f"PDF file generated successfully: {filename}, size: {len(pdf_bytes)} bytes")
+                    return response
+                    
+                except Exception as e:
+                    logger.error(f"Error generating PDF file: {str(e)}")
+                    return Response({
+                        'success': False,
+                        'error': f'PDF generation failed: {str(e)}',
+                        'error_code': '500_PDF_Generation_Error'
+                    }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            else:
+                # Return JSON with base64 encoded PDF
+                result = converter.convert_html_to_pdf(html_content, css_content, base_url)
+                
+                if result.get('success'):
+                    logger.info(f"PDF generated successfully. Size: {result.get('pdf_size_bytes')} bytes")
+                    return Response(result, status=status.HTTP_200_OK)
+                else:
+                    logger.error(f"PDF conversion failed: {result.get('error')}")
+                    return Response(result, status=status.HTTP_400_BAD_REQUEST)
+                    
+        except ImportError as e:
+            logger.error(f"PDF engine not available: {str(e)}")
+            return Response({
+                'success': False,
+                'error': 'PDF conversion engine not available. Install weasyprint or xhtml2pdf.',
+                'error_code': '500_Engine_Not_Available'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+        except Exception as e:
+            logger.error(f"Unexpected error in HTML to PDF endpoint: {str(e)}")
+            return Response({
+                'success': False,
+                'error': f'Unexpected error: {str(e)}',
+                'error_code': '500_Unexpected_Error'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
