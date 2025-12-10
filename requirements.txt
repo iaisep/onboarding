@@ -46,7 +46,10 @@ cryptography==43.0.0
 gunicorn==23.0.0
 
 # PDF Generation
-weasyprint==62.3
+weasyprint==60.2
+cssselect2==0.7.0
+tinycss2==1.3.0
+pydyf==0.10.0
 
 # Development Tools (optional)
 # fabric==3.2.2
