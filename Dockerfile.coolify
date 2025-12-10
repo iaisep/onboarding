@@ -32,7 +32,19 @@ RUN for i in 1 2 3; do \
             libglib2.0-0 \
             libsm6 \
             libxext6 \
-            libxrender-dev && \
+            libxrender-dev \
+            # WeasyPrint dependencies
+            libpango-1.0-0 \
+            libpangocairo-1.0-0 \
+            libgdk-pixbuf2.0-0 \
+            libffi-dev \
+            shared-mime-info \
+            libcairo2 \
+            libcairo2-dev \
+            libgirepository1.0-dev \
+            gir1.2-pango-1.0 \
+            fonts-liberation \
+            fonts-dejavu-core && \
         break || sleep 10; \
     done
 
